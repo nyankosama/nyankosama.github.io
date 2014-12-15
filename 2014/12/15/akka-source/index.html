@@ -76,7 +76,7 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
     </p>
   <p class="article-time">
     <time datetime="2014-12-15T10:49:01.000Z" itemprop="datePublished">12月 15 2014</time>
-    Updated:<time datetime="2014-12-15T15:39:18.000Z" itemprop="dateModified">12月 15 2014</time>
+    Updated:<time datetime="2014-12-15T15:52:05.000Z" itemprop="dateModified">12月 15 2014</time>
     
   </p>
 </header>
@@ -110,8 +110,8 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 <figure class="highlight scala"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">ActorTest</span> <span class="keyword">extends</span> <span class="title">Actor</span></span>{</div><div class="line">  <span class="keyword">val</span> log = Logging(context.system, <span class="keyword">this</span>)</div><div class="line"></div><div class="line">  <span class="keyword">override</span> <span class="keyword">def</span> receive = {</div><div class="line">    <span class="keyword">case</span> <span class="string">"test"</span> =&gt; log.info(<span class="string">"received test"</span>);</div><div class="line">    <span class="keyword">case</span> _ =&gt; log.info(<span class="string">"unknown info"</span>)</div><div class="line">  }</div><div class="line">}</div><div class="line"></div><div class="line"><span class="class"><span class="keyword">object</span> <span class="title">ActorTest</span></span>{</div><div class="line">  <span class="keyword">def</span> props(): Props = Props[ActorTest]</div><div class="line">}</div><div class="line"></div><div class="line"><span class="class"><span class="keyword">object</span> <span class="title">Test1</span> <span class="keyword">extends</span> <span class="title">App</span></span>{</div><div class="line">  <span class="keyword">val</span> system = ActorSystem(<span class="string">"testSystem"</span>)</div><div class="line">  <span class="keyword">val</span> actorTest = system.actorOf(ActorTest.props(), name = <span class="string">"actorTest"</span>)</div><div class="line">  actorTest ! <span class="string">"test"</span></div><div class="line">}</div></pre></td></tr></table></figure>
 
 <p>上面这一段代码建立了一个测试Actor，main方法创建ActorSystem，由此获得测试Actor的ActorRef，并且向其发送了一条内容为”test”消息。如果我们运行这段程序的话将会有下面的输出：</p>
-<p><code>[INFO] [12/15/2014 21:36:24.524] [testSystem-akka.actor.default-dispatcher-3] [akka://testSystem/user/actorTest] received test</code></p>
-<p>代表ActorTest收到了消息，向log输出了”received test”，这是一个非常简单的例子，下面就将从这个例子开始来分析源码的调用路径以及各个类之间的协作过程。</p>
+<pre><code><span class="attr_selector">[INFO]</span> <span class="attr_selector">[12/15/2014 21:36:24.524]</span> <span class="attr_selector">[testSystem-akka.actor.default-dispatcher-3]</span> <span class="attr_selector">[akka://testSystem/user/actorTest]</span> <span class="tag">received</span> <span class="tag">test</span>
+</code></pre><p>代表ActorTest收到了消息，向log输出了”received test”，这是一个非常简单的例子，下面就将从这个例子开始来分析源码的调用路径以及各个类之间的协作过程。</p>
 <h3 id="Akka中主要几个类的协作">Akka中主要几个类的协作</h3>
 <p>根据上面的例子，下面依次简要介绍akka中几个主要的class的作用以及依赖关系。</p>
 <p>首先，ActorSystem是一组共享同一个配置的actor的管理者和外部接口，一般我们从同一个JVM中只会创建一个ActorSystem并通过这个ActorSystem来进一步去构建各种actor，从而是系统运行起来。在ActorSystem中包含一系列的actor以及系统相关的属性，例如actorPath、scheduler、默认的dispacher等等，除此之外还有一系列的接口。ActorSystem是一个抽象类，其具体实现类为ActorSystemImpl。当我们调用ActorSystem(“testSystem”)时，实际调用了其伴生对象的apply方法，该方法获取相应的classLoader和settings之后，初始化ActorSystemImpl并返回ActorSystem引用</p>
