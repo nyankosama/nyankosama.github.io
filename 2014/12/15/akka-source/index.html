@@ -76,7 +76,7 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
     </p>
   <p class="article-time">
     <time datetime="2014-12-15T10:49:01.000Z" itemprop="datePublished">12月 15 2014</time>
-    Updated:<time datetime="2014-12-15T13:26:00.000Z" itemprop="dateModified">12月 15 2014</time>
+    Updated:<time datetime="2014-12-15T13:38:50.000Z" itemprop="dateModified">12月 15 2014</time>
     
   </p>
 </header>
@@ -109,7 +109,9 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 <h3 id="从一个示例开始">从一个示例开始</h3>
 <figure class="highlight scala"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">ActorTest</span> <span class="keyword">extends</span> <span class="title">Actor</span></span>{</div><div class="line">  <span class="keyword">val</span> log = Logging(context.system, <span class="keyword">this</span>)</div><div class="line"></div><div class="line">  <span class="keyword">override</span> <span class="keyword">def</span> receive = {</div><div class="line">    <span class="keyword">case</span> <span class="string">"test"</span> =&gt; log.info(<span class="string">"received test"</span>);</div><div class="line">    <span class="keyword">case</span> _ =&gt; log.info(<span class="string">"unknown info"</span>)</div><div class="line">  }</div><div class="line">}</div><div class="line"></div><div class="line"><span class="class"><span class="keyword">object</span> <span class="title">ActorTest</span></span>{</div><div class="line">  <span class="keyword">def</span> props(): Props = Props[ActorTest]</div><div class="line">}</div><div class="line"></div><div class="line"><span class="class"><span class="keyword">object</span> <span class="title">Test1</span> <span class="keyword">extends</span> <span class="title">App</span></span>{</div><div class="line">  <span class="keyword">val</span> system = ActorSystem(<span class="string">"testSystem"</span>)</div><div class="line">  <span class="keyword">val</span> actorTest = system.actorOf(ActorTest.props(), name = <span class="string">"actorTest"</span>)</div><div class="line">  actorTest ! <span class="string">"test"</span></div><div class="line">}</div></pre></td></tr></table></figure>
 
-<p>//To be continued</p>
+<p>上面这一段代码建立了一个测试Actor，main方法创建ActorSystem，由此获得测试Actor的ActorRef，并且向其发送了一条内容为”test”消息。如果我们运行这段程序的话将会有下面的输出：</p>
+<p><code>[INFO] [12/15/2014 21:36:24.524] [testSystem-akka.actor.default-dispatcher-3] [akka://testSystem/user/actorTest] received test</code></p>
+<p>代表ActorTest收到了消息，向log输出了”received test”</p>
   
 	</div>
 		<footer class="article-footer clearfix">
