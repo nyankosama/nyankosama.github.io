@@ -1,0 +1,459 @@
+
+ <!DOCTYPE HTML>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="baidu_union_verify" content="d1952c66cf48912e21c18c7c581f382a">
+  <meta name="360-site-verification" content="67fbcc5a67f4c65c057315b28fa0b2c8" />
+<meta name="google-site-verification" content="2GzxQ0VtXwTSUdmGm6DzcmhTzM_I9QmzCb_pzpMzD88" />
+  
+    <title>Goroutines 并发模式（二） | Nyankosama&#39;s Blog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=3, minimum-scale=1">
+    
+    <meta name="author" content="Liangrui He">
+    
+    <meta name="description" content="前言
+在Goroutines 并发模式（一）中，我们简单地通过boring函数的例子来粗略地阐述了通过channels来和goroutines交流的方法。在本篇中，我将从pattern的方向出发，通过对boring函数的例子进行各种改写，来讲解几种常见了goroutines的并发模式。
+并发模式
+让我们先来回顾一下boring函数的例子。
+123456789101112131415func boring(msg string, c chan string) {   for i := 0; ; i++ {        c &amp;lt;- fmt.Sprintf(&quot;%s %d&quot;, msg, i)        time.Sleep(time.Duration(rand.Intn(1e3)) * time.Millisecond)	}}           func main() {		c := make(chan string)	go boring(&quot;boring!&quot;, c) 	for i := 0; i &amp;lt; 5; i++ {    	fmt.Printf(&quot;You say: %q\n&quot;, &amp;lt;-c)    }    fmt.Println(&quot;You&#39;re boring; I&#39;m leaving.&quot;)}">
+    
+    
+    
+    
+    <link rel="alternate" href="atom.xml" title="Nyankosama&#39;s Blog" type="application/atom+xml">
+    
+    
+    
+    <link rel="stylesheet" href="/css/style.css" type="text/css">
+
+     
+</head>
+
+  <body>
+    <header>
+      <div>
+		
+			<div id="textlogo">
+				<h1 class="site-name"><a href="/" title="Nyankosama&#39;s Blog">Nyankosama&#39;s Blog</a></h1>
+				<a class="blog-motto">为了变成大魔王而日夜不停地努力中~~~ ヾ(≧へ≦)〃</a>
+			</div>
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
+			</a></div>
+			<nav class="animated">
+				<ul>
+					<ul>
+					 
+						<li><a href="/">首页</a></li>
+					
+						<li><a href="/archives">归档</a></li>
+					
+						<li><a href="/about">关于</a></li>
+					
+					<li>
+					
+					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
+						<label>Search</label>
+						<input type="text" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
+						<input type="hidden" name="q" value="site:www.nyankosama.com">
+					</form>
+					
+					</li>
+				</ul>
+                            </nav>			
+</div>
+
+    </header>
+    <div id="container">
+      <div id="main" class="post" itemscope itemprop="blogPost">
+	<article itemprop="articleBody"> 
+		<header class="article-info clearfix">
+  <h1 itemprop="name">
+    
+      <a href="/2013/08/21/2013-08-22-goroutines-patterns-two/" title="Goroutines 并发模式（二）" itemprop="url">Goroutines 并发模式（二）</a>
+  </h1>
+  <p class="article-author">By
+    
+      <a href="http://www.nyankosama.com" title="Liangrui He">Liangrui He</a>
+    </p>
+  <p class="article-time">
+    <time datetime="2013-08-21T07:28:00.000Z" itemprop="datePublished">8月 21 2013</time>
+    Updated:<time datetime="2014-12-15T08:45:15.000Z" itemprop="dateModified">12月 15 2014</time>
+    
+  </p>
+</header>
+	<div class="article-content">
+		
+		
+		<div id="toc" class="toc-article">
+			<strong class="toc-title">Contents</strong>
+		<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#并发模式"><span class="toc-number">2.</span> <span class="toc-text">并发模式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#生成器(Generator)"><span class="toc-number">2.1.</span> <span class="toc-text">生成器(Generator)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#多路复合(Multiplexing)"><span class="toc-number">2.2.</span> <span class="toc-text">多路复合(Multiplexing)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#选择(Select)"><span class="toc-number">2.3.</span> <span class="toc-text">选择(Select)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#超时(Timeout)"><span class="toc-number">2.4.</span> <span class="toc-text">超时(Timeout)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#退出"><span class="toc-number">2.5.</span> <span class="toc-text">退出</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#菊花链(Daisy-chain)"><span class="toc-number">2.6.</span> <span class="toc-text">菊花链(Daisy-chain)</span></a></li></ol></li></ol>
+		</div>
+		
+		<hr>
+<h2 id="前言"><strong>前言</strong></h2>
+<p>在<a href="/blog/2013/08/21/goroutines-patterns/">Goroutines 并发模式（一）</a>中，我们简单地通过boring函数的例子来粗略地阐述了通过channels来和goroutines交流的方法。在本篇中，我将从pattern的方向出发，通过对boring函数的例子进行各种改写，来讲解几种常见了goroutines的并发模式。</p>
+<h2 id="并发模式"><strong>并发模式</strong></h2>
+<p>让我们先来回顾一下boring函数的例子。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>, c <span class="keyword">chan</span> <span class="typename">string</span>) {</div><div class="line">   <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">        c &lt;- fmt.Sprintf(<span class="string">"%s %d"</span>, msg, i)</div><div class="line">        time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)</div><div class="line">	}</div><div class="line">}</div><div class="line">           </div><div class="line"><span class="keyword">func</span> main() {	</div><div class="line">	c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">	<span class="keyword">go</span> boring(<span class="string">"boring!"</span>, c)</div><div class="line"> 	<span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt;<span class="number"> 5</span>; i++ {</div><div class="line">    	fmt.Printf(<span class="string">"You say: %q\n"</span>, &lt;-c)</div><div class="line">    }</div><div class="line">    fmt.Println(<span class="string">"You're boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<a id="more"></a>
+
+<p>接下来，我会base于上面的这个例子，来介绍各种patterns</p>
+<h3 id="生成器(Generator)"><strong>生成器(Generator)</strong></h3>
+<p>由于go中的channel也是一种变量，所以我们可以通过返回channel的方式来传递结果</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>) &lt;-<span class="keyword">chan</span> <span class="typename">string</span> { </div><div class="line">    c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>() { </div><div class="line">        <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">            c &lt;- fmt.Sprintf(<span class="string">"%s %d"</span>, msg, i)</div><div class="line">            time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)</div><div class="line">        }</div><div class="line">    }()</div><div class="line">    <span class="keyword">return</span> c </div><div class="line">}</div><div class="line"><span class="keyword">func</span> main(){</div><div class="line">	c := boring(<span class="string">"boring!"</span>) </div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt;<span class="number"> 5</span>; i++ {</div><div class="line">        fmt.Printf(<span class="string">"You say: %q\n"</span>, &lt;-c)</div><div class="line">    }</div><div class="line">    fmt.Println(<span class="string">"You're boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>通过这个例子，我们可以很容易想到其他运用返回结果channel的例子，这样做不仅使得程序更加的清晰，而且更加有利于的非阻塞过程的组织，因为我们可以在任何必要的时候通过结果channel读取结果。如此一来，我们可以将boring作为一种服务，就像下面的例子：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> main() {</div><div class="line">    joe := boring(<span class="string">"Joe"</span>)</div><div class="line">    ann := boring(<span class="string">"Ann"</span>)</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt;<span class="number"> 5</span>; i++ {</div><div class="line">        fmt.Println(&lt;-joe)</div><div class="line">        fmt.Println(&lt;-ann)</div><div class="line">    }</div><div class="line">    fmt.Println(<span class="string">"You're both boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<h3 id="多路复合(Multiplexing)"><strong>多路复合(Multiplexing)</strong></h3>
+<p>之前的例子我们都是通过一个channel来返回结果，下面我们将把多个结果channel给复合到一个channel中去。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> fanIn(input1, input2 &lt;-<span class="keyword">chan</span> <span class="typename">string</span>) &lt;-<span class="keyword">chan</span> <span class="typename">string</span> {</div><div class="line">    c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>() { <span class="keyword">for</span> { c &lt;- &lt;-input1 } }()</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>() { <span class="keyword">for</span> { c &lt;- &lt;-input2 } }()</div><div class="line">    <span class="keyword">return</span> c</div><div class="line">}</div><div class="line"><span class="keyword">func</span> main() {</div><div class="line">    c := fanIn(boring(<span class="string">"Joe"</span>), boring(<span class="string">"Ann"</span>))</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt;<span class="number"> 10</span>; i++ {</div><div class="line">        fmt.Println(&lt;-c)</div><div class="line">    }</div><div class="line">    fmt.Println(<span class="string">"You're both boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>我们通过fanIn函数将两个boring函数返回的结果channel给复合到了一个channel中，这样我们可以看到在main函数中通过复合后的channel读出的结果数据将是随机的。下面这张图很形象地的展现了多路复合模式的过程。</p>
+<img src="/images/blog/goroutines_patterns/gophermegaphones.jpg">
+
+<h3 id="选择(Select)"><strong>选择(Select)</strong></h3>
+<p>Go中的select其实和Unix/Linux下的多路复用的select在思想上有异曲同工之妙，我们可以通过Select来做很多很美妙的事情。首先，我们来改写fanin方法，把它改写为使用select的版本：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> fanIn(input1, input2 &lt;-<span class="keyword">chan</span> <span class="typename">string</span>) &lt;-<span class="keyword">chan</span> <span class="typename">string</span> {</div><div class="line">    c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>() {</div><div class="line">        <span class="keyword">for</span> {</div><div class="line">            <span class="keyword">select</span> {</div><div class="line">            <span class="keyword">case</span> s := &lt;-input1:  c &lt;- s</div><div class="line">            <span class="keyword">case</span> s := &lt;-input2:  c &lt;- s</div><div class="line">            }</div><div class="line">        }</div><div class="line">    }()</div><div class="line">    <span class="keyword">return</span> c</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>这里的select将同时监听多个channel，只要有其中一个channel可以读取数据，那么select就将解除阻塞状态，运行相应case下的代码。如果您写过一些高性能的并发程序，那么您一定早就发现select真乃神器，select不仅可以简化代码清晰逻辑，而且可以减少IO并发开销，大大增大并发吞吐量。</p>
+<h3 id="超时(Timeout)"><strong>超时(Timeout)</strong></h3>
+<p>在goroutines中，有时候可能会因为等待某个channel而长期阻塞某个goroutine，所以我们需要为之增加超时的功能。下面例子将使用select实现超时功能。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> main() {</div><div class="line">    c := boring(<span class="string">"Joe"</span>)</div><div class="line">    <span class="keyword">for</span> {</div><div class="line">        <span class="keyword">select</span> {</div><div class="line">        <span class="keyword">case</span> s := &lt;-c:</div><div class="line">            fmt.Println(s)</div><div class="line">        <span class="keyword">case</span> &lt;-time.After<span class="number">(1</span> * time.Second):</div><div class="line">            fmt.Println(<span class="string">"You're too slow."</span>)</div><div class="line">            <span class="keyword">return</span></div><div class="line">        }</div><div class="line">    }</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>这里的time是go提供的一个库，After方法将返回一个在相应时间之后可以读取的channel，这样我们使用select就可以很方便得实现超时处理的功能。</p>
+<h3 id="退出"><strong>退出</strong></h3>
+<p>那么我们怎么来控制一个goroutine，使它可以结束自己的使命正常结束呢？其实很简单，同样我们使用select来实现这个功能。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>, quit <span class="keyword">chan</span> <span class="typename">bool</span>) &lt;-<span class="keyword">chan</span> <span class="typename">string</span> { </div><div class="line">    c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>() { </div><div class="line">        <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">        	<span class="keyword">select</span> {</div><div class="line">        	<span class="keyword">case</span> c &lt;- fmt.Sprintf(<span class="string">"%s: %d"</span>, msg, i):</div><div class="line">        		time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)	</div><div class="line">        	<span class="keyword">case</span> &lt;-quit:</div><div class="line">        		<span class="keyword">return</span></div><div class="line">        	}</div><div class="line">        }</div><div class="line">    }()</div><div class="line">    <span class="keyword">return</span> c</div><div class="line">}</div><div class="line"><span class="keyword">func</span> main(){</div><div class="line">	quit := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">bool</span>)</div><div class="line">    c := boring(<span class="string">"Joe"</span>, quit)</div><div class="line">    <span class="keyword">for</span> i := rand.Intn<span class="number">(10</span>); i &gt;=<span class="number"> 0</span>; i-- { fmt.Println(&lt;-c) }</div><div class="line">    quit &lt;- <span class="constant">true</span></div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>通过在boring的循环中增加一个select，在main中我们便可以通过向quit 写入数据的方式来控制boring的退出。换句话来讲，其实就是做到了不同goroutines间的一个交流罢了。</p>
+<h3 id="菊花链(Daisy-chain)"><strong>菊花链(Daisy-chain)</strong></h3>
+<p>要说清楚什么是菊花链，让我们先看一幅图</p>
+<img src="/images/blog/goroutines_patterns/gophereartrumpet.jpg">
+
+<p>我们看图说话，图中的gopher是一个一个channel，这些channel从头到尾连了起来。但我们把一个数据放到channel的头部的时候，通过传递，我们便可以从channel的尾部读出数据。是不是觉得这很像大家小时候玩的传悄悄话的游戏？？具体实例如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> f(left, right <span class="keyword">chan</span> <span class="typename">int</span>) {</div><div class="line">    left &lt;-<span class="number"> 1</span> + &lt;-right</div><div class="line">}</div><div class="line"></div><div class="line"><span class="keyword">func</span> main() {</div><div class="line">    <span class="keyword">const</span> n =<span class="number"> 100000</span></div><div class="line">    leftmost := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">int</span>)</div><div class="line">    right := leftmost</div><div class="line">    left := leftmost</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt; n; i++ {</div><div class="line">        right = <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">int</span>)</div><div class="line">        <span class="keyword">go</span> f(left, right)</div><div class="line">        left = right</div><div class="line">    }</div><div class="line">    <span class="keyword">go</span> <span class="keyword">func</span>(c <span class="keyword">chan</span> <span class="typename">int</span>) { c &lt;-<span class="number"> 1</span> }(right)</div><div class="line">    fmt.Println(&lt;-leftmost)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>上面代码初始化了100000个channel，并把他们按照顺序连接起来。最后向最右边的channel写入一个数据，从最左边的channel读出来。这种菊花链的模型非常适合作为过滤器filter来使用，通过channel来连接filter会显得十分方便。</p>
+  
+	</div>
+		<footer class="article-footer clearfix">
+
+  <div class="article-tags">
+  
+  <span></span> <a href="/tags/Go/">Go</a><a href="/tags/goroutines/">goroutines</a>
+  </div>
+
+
+
+
+<div class="article-share" id="share">
+
+  <div data-url="http://www.nyankosama.com/2013/08/21/2013-08-22-goroutines-patterns-two/" data-title="Goroutines 并发模式（二） | Nyankosama&#39;s Blog" data-tsina="null" class="share clearfix">
+  </div>
+
+</div>
+</footer>   	       
+	</article>
+	
+<nav class="article-nav clearfix">
+ 
+ <div class="prev" >
+ <a href="/2013/10/16/2013-10-16-git-develop-model/" title="git版本控制开发流程小结笔记（一）">
+  <strong>PREVIOUS:</strong><br/>
+  <span>
+  git版本控制开发流程小结笔记（一）</span>
+</a>
+</div>
+
+
+<div class="next">
+<a href="/2013/08/21/2013-08-21-goroutines-patterns/"  title="Goroutines 并发模式（一）">
+ <strong>NEXT:</strong><br/> 
+ <span>Goroutines 并发模式（一）
+</span>
+</a>
+</div>
+
+</nav>
+
+	
+<section class="comment">
+	<div class="ds-thread"></div>
+</section>
+
+</div>  
+      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
+
+  <div id="toc" class="toc-aside">
+  <strong class="toc-title">Contents</strong>
+  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#并发模式"><span class="toc-number">2.</span> <span class="toc-text">并发模式</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#生成器(Generator)"><span class="toc-number">2.1.</span> <span class="toc-text">生成器(Generator)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#多路复合(Multiplexing)"><span class="toc-number">2.2.</span> <span class="toc-text">多路复合(Multiplexing)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#选择(Select)"><span class="toc-number">2.3.</span> <span class="toc-text">选择(Select)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#超时(Timeout)"><span class="toc-number">2.4.</span> <span class="toc-text">超时(Timeout)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#退出"><span class="toc-number">2.5.</span> <span class="toc-text">退出</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#菊花链(Daisy-chain)"><span class="toc-number">2.6.</span> <span class="toc-text">菊花链(Daisy-chain)</span></a></li></ol></li></ol>
+  </div>
+
+<div id="asidepart">
+<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
+<aside class="clearfix">
+<div id="authorInfo">
+	
+		<div class="author-logo"></div>		
+	
+	<div class="social-list" class="clearfix">
+		
+		<a href="http://weibo.com/nyankosama" target="_blank" title="weibo"></a>
+		
+		
+		
+		<a href="https://github.com/nyankosama" target="_blank" title="github"></a>
+		
+		
+		<a href="https://www.facebook.com/heliangrui" target="_blank" title="facebook"></a>
+		
+		
+	</div>
+</div>
+
+  
+
+  
+<div class="tagslist">
+	<p class="asidetitle">Tags</p>
+		<ul class="clearfix">
+		
+			<li><a href="/tags/Go/" title="Go">Go<sup>2</sup></a></li>
+		
+			<li><a href="/tags/git/" title="git">git<sup>2</sup></a></li>
+		
+			<li><a href="/tags/goroutines/" title="goroutines">goroutines<sup>2</sup></a></li>
+		
+		</ul>
+</div>
+
+
+  <div class="rsspart">
+	<a href="atom.xml" target="_blank" title="rss">RSS</a>
+</div>
+
+  
+  <div class="tagcloudlist">
+    <p class="asidetitle">Tag Cloud</p>
+    <div class="tagcloudlist clearfix">
+       <a href="/tags/Go/" style="font-size: NaNpx;">Go</a><a href="/tags/git/" style="font-size: NaNpx;">git</a><a href="/tags/goroutines/" style="font-size: NaNpx;">goroutines</a>
+    </div>
+  </div>
+
+
+</aside>
+</div>
+    </div>
+    <footer><div id="footer" >
+    
+            <p class="copyright"> © 2014 
+		
+		<a href="http://www.nyankosama.com" target="_blank" title="Liangrui He">Liangrui He</a>
+		
+            && Powered by <a href="http://hexo.io" target="_blank" title="hexo">hexo</a> && Theme by <a href="http://gengbiao.me" target="_blank" title="coney">coney</a>
+            </div>
+</footer>
+    <script src="/js/jquery-2.1.0.min.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){ 
+  $('.navbar').click(function(){
+    $('header nav').toggleClass('shownav');
+  });
+  var myWidth = 0;
+  function getSize(){
+    if( typeof( window.innerWidth ) == 'number' ) {
+      myWidth = window.innerWidth;
+    } else if( document.documentElement && document.documentElement.clientWidth) {
+      myWidth = document.documentElement.clientWidth;
+    };
+  };
+  var m = $('#main'),
+      a = $('#asidepart'),
+      c = $('.closeaside'),
+      o = $('.openaside');
+  $(window).resize(function(){
+    getSize(); 
+    if (myWidth >= 1024) {
+      $('header nav').removeClass('shownav');
+    }else
+    {
+      m.removeClass('moveMain');
+      a.css('display', 'block').removeClass('fadeOut');
+      o.css('display', 'none');
+      
+      $('#toc.toc-aside').css('display', 'none');
+        
+    }
+  });
+  c.click(function(){
+    a.addClass('fadeOut').css('display', 'none');
+    o.css('display', 'block').addClass('fadeIn');
+    m.addClass('moveMain');
+  });
+  o.click(function(){
+    o.css('display', 'none').removeClass('beforeFadeIn');
+    a.css('display', 'block').removeClass('fadeOut').addClass('fadeIn');      
+    m.removeClass('moveMain');
+  });
+  $(window).scroll(function(){
+    o.css("top",Math.max(80,260-$(this).scrollTop()));
+  });
+});
+</script>
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var ai = $('.article-content>iframe'),
+      ae = $('.article-content>embed'),
+      t  = $('#toc'),
+      h  = $('article h2')
+      ah = $('article h2'),
+      ta = $('#toc.toc-aside'),
+      o  = $('.openaside'),
+      c  = $('.closeaside');
+  if(ai.length>0){
+    ai.wrap('<div class="video-container" />');
+  };
+  if(ae.length>0){
+   ae.wrap('<div class="video-container" />');
+  };
+  if(ah.length==0){
+    t.css('display','none');
+  }else{
+    c.click(function(){
+      ta.css('display', 'block').addClass('fadeIn');
+    });
+    o.click(function(){
+      ta.css('display', 'none');
+    });
+    $(window).scroll(function(){
+      ta.css("top",Math.max(140,320-$(this).scrollTop()));
+    });
+  };
+});
+</script>
+
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var $this = $('.share'),
+      url = $this.attr('data-url'),
+      encodedUrl = encodeURIComponent(url),
+      title = $this.attr('data-title'),
+      tsina = $this.attr('data-tsina');
+  var html = [
+  '<a href="#" class="overlay" id="qrcode"></a>',
+  '<div class="qrcode clearfix"><span>扫描二维码分享到微信朋友圈</span><a class="qrclose" href="#share"></a><strong>Loading...Please wait</strong><img id="qrcode-pic" data-src="http://s.jiathis.com/qrcode.php?url=' + encodedUrl + '"/></div>',
+  '<a href="#textlogo" class="article-back-to-top" title="Top"></a>',
+  '<a href="https://www.facebook.com/sharer.php?u=' + encodedUrl + '" class="article-share-facebook" target="_blank" title="Facebook"></a>',
+  '<a href="#qrcode" class="article-share-qrcode" title="QRcode"></a>',
+  '<a href="https://twitter.com/intent/tweet?url=' + encodedUrl + '" class="article-share-twitter" target="_blank" title="Twitter"></a>',
+  '<a href="http://service.weibo.com/share/share.php?title='+title+'&url='+encodedUrl +'&ralateUid='+ tsina +'&searchPic=true&style=number' +'" class="article-share-weibo" target="_blank" title="Weibo"></a>',
+  '<span title="Share to"></span>'
+  ].join('');
+  $this.append(html);
+  $('.article-share-qrcode').click(function(){
+    var imgSrc = $('#qrcode-pic').attr('data-src');
+    $('#qrcode-pic').attr('src', imgSrc);
+    $('#qrcode-pic').load(function(){
+        $('.qrcode strong').text(' ');
+    });
+  });
+});     
+</script>
+
+
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"null"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script> 
+
+
+
+
+
+<script>
+    
+        var _bdImg = '4';
+    
+    window._bd_share_config={
+        "common":{
+            "bdSnsKey":{
+
+            },
+            "bdText":"",
+            "bdMini":"2",
+            "bdMiniList":[
+                "qzone",
+                "tsina",
+                "weixin",
+                "renren",
+                "tqq",
+                "tieba",
+                "douban",
+                "sqq",
+                "diandian",
+                "huaban",
+                "youdao",
+                "mail",
+                "ty",
+                "fbook",
+                "twi",
+                "linkedin",
+                "copy",
+                "print"
+            ],
+            "bdPic":"",
+            "bdStyle":"0",
+            "bdSize":"16"
+        },
+        "slide":{
+            "type":"slide",
+            "bdImg":_bdImg,
+            "bdPos":"right",
+            "bdTop":"350"
+        },
+        "image":{
+            "viewList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ],
+            "viewText":"分享：",
+            "viewSize":"16"
+        },
+        "selectShare":{
+            "bdContainerClass":null,
+            "bdSelectMiniList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ]
+        }
+    };
+    with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?v=89860593.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+
+
+
+
+  </body>
+</html>
+

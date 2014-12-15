@@ -1,0 +1,459 @@
+
+ <!DOCTYPE HTML>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="baidu_union_verify" content="d1952c66cf48912e21c18c7c581f382a">
+  <meta name="360-site-verification" content="67fbcc5a67f4c65c057315b28fa0b2c8" />
+<meta name="google-site-verification" content="2GzxQ0VtXwTSUdmGm6DzcmhTzM_I9QmzCb_pzpMzD88" />
+  
+    <title>Goroutines 并发模式（一） | Nyankosama&#39;s Blog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=3, minimum-scale=1">
+    
+    <meta name="author" content="Liangrui He">
+    
+    <meta name="description" content="前言
+由于前一阶段实习中接到的项目的告一段落，不知不觉便多出了许多空余的时间，于是就想总结一下最近因为个人兴趣而学习的一些东西。从这篇文章开始以及后面陆续的几篇关于GO语言的文章，均是博主最近对GO语言学习过程中的一些感悟、总结，类似于学习笔记的东西。记录下来并整理成博客一为对学习的知识做一个整理，二为分享出来给大家（因为国内关于GO语言的中文资料比较少），由于博主能力和知识有限，难免有所靡误，还望勘正。">
+    
+    
+    
+    
+    <link rel="alternate" href="atom.xml" title="Nyankosama&#39;s Blog" type="application/atom+xml">
+    
+    
+    
+    <link rel="stylesheet" href="/css/style.css" type="text/css">
+
+     
+</head>
+
+  <body>
+    <header>
+      <div>
+		
+			<div id="textlogo">
+				<h1 class="site-name"><a href="/" title="Nyankosama&#39;s Blog">Nyankosama&#39;s Blog</a></h1>
+				<a class="blog-motto">为了变成大魔王而日夜不停地努力中~~~ ヾ(≧へ≦)〃</a>
+			</div>
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
+			</a></div>
+			<nav class="animated">
+				<ul>
+					<ul>
+					 
+						<li><a href="/">首页</a></li>
+					
+						<li><a href="/archives">归档</a></li>
+					
+						<li><a href="/about">关于</a></li>
+					
+					<li>
+					
+					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
+						<label>Search</label>
+						<input type="text" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
+						<input type="hidden" name="q" value="site:www.nyankosama.com">
+					</form>
+					
+					</li>
+				</ul>
+                            </nav>			
+</div>
+
+    </header>
+    <div id="container">
+      <div id="main" class="post" itemscope itemprop="blogPost">
+	<article itemprop="articleBody"> 
+		<header class="article-info clearfix">
+  <h1 itemprop="name">
+    
+      <a href="/2013/08/21/2013-08-21-goroutines-patterns/" title="Goroutines 并发模式（一）" itemprop="url">Goroutines 并发模式（一）</a>
+  </h1>
+  <p class="article-author">By
+    
+      <a href="http://www.nyankosama.com" title="Liangrui He">Liangrui He</a>
+    </p>
+  <p class="article-time">
+    <time datetime="2013-08-21T07:28:00.000Z" itemprop="datePublished">8月 21 2013</time>
+    Updated:<time datetime="2014-12-15T08:45:57.000Z" itemprop="dateModified">12月 15 2014</time>
+    
+  </p>
+</header>
+	<div class="article-content">
+		
+		
+		<div id="toc" class="toc-article">
+			<strong class="toc-title">Contents</strong>
+		<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#并发而非并行"><span class="toc-number">2.</span> <span class="toc-text">并发而非并行</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#什么是Goroutines"><span class="toc-number">3.</span> <span class="toc-text">什么是Goroutines</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#让我们从几个例子开始"><span class="toc-number">4.</span> <span class="toc-text">让我们从几个例子开始</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#一个很无聊的函数"><span class="toc-number">4.1.</span> <span class="toc-text">一个很无聊的函数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#嗯哼，稍微不那么无聊一点了"><span class="toc-number">4.2.</span> <span class="toc-text">嗯哼，稍微不那么无聊一点了</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让我们把它run起来！~Let’s_go！"><span class="toc-number">4.3.</span> <span class="toc-text">让我们把它run起来！~Let’s go！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让函数Go起来！"><span class="toc-number">4.4.</span> <span class="toc-text">让函数Go起来！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让我们等一下TA吧"><span class="toc-number">4.5.</span> <span class="toc-text">让我们等一下TA吧</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#使用channels！"><span class="toc-number">4.6.</span> <span class="toc-text">使用channels！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让boring和main成为好基友"><span class="toc-number">4.7.</span> <span class="toc-text">让boring和main成为好基友</span></a></li></ol></li></ol>
+		</div>
+		
+		<hr>
+<h2 id="前言"><strong>前言</strong></h2>
+<p>由于前一阶段实习中接到的项目的告一段落，不知不觉便多出了许多空余的时间，于是就想总结一下最近因为个人兴趣而学习的一些东西。从这篇文章开始以及后面陆续的几篇关于GO语言的文章，均是博主最近对GO语言学习过程中的一些感悟、总结，类似于学习笔记的东西。记录下来并整理成博客一为对学习的知识做一个整理，二为分享出来给大家（因为国内关于GO语言的中文资料比较少），由于博主能力和知识有限，难免有所靡误，还望勘正。</p>
+<a id="more"></a>
+
+<p>由于Go最近一系列出色的表现，从一开始Go便紧紧地吸引住了我的眼球。类似于Erlang、Scala等语言，Go也是天生为并发而设计的语言，Go有着许多在原生层面对并发编程进行支持的优秀特性，比如大名鼎鼎的Goroutines、Channels、Select等原生特性。那么废话不多说，这一篇主要是对GO语言中的并发编程模式做一个粗略的归纳总结，涉及到的Go语言的语法知识细节将予以略去。Go语言语法请参考<a href="http://golang.org/" target="_blank" rel="external">http://golang.org/</a></p>
+<p><br></p>
+<h2 id="并发而非并行"><strong>并发而非并行</strong></h2>
+<p>首先我们要明确两个名词：并发(Concurrency)、并行(Parallelism)。这两个词可能大家经常搞混淆，因为这两个词所标书的意思太过相近，但是前者更加偏向于设计(Design)，而后者更加偏向于结构(Structure)。</p>
+<ul>
+<li>如果你有只有一个CPU，那么你的程序可以是并发的，但一定不是并行的</li>
+<li>一个良好的并发程序并非一定是并行的</li>
+<li>并行是一种物理状态，而并发是一种设计思想、程序的内部结构</li>
+<li>多处理器才有可能达到并发的物理状态</li>
+</ul>
+<h2 id="什么是Goroutines"><strong>什么是Goroutines</strong></h2>
+<p>Goroutine是一个通过go关键字起起来的独立的执行某个function的过程，它拥有独立的可以自行管理的调用栈。</p>
+<ul>
+<li>goroutine非常廉价，你可以拥有几千甚至上万的goroutines</li>
+<li>goroutine不是thread</li>
+<li>一个thread之下可能有上千的goroutines</li>
+<li>你可以把goroutine理解为廉价的thread</li>
+</ul>
+<p><br></p>
+<h2 id="让我们从几个例子开始"><strong>让我们从几个例子开始</strong></h2>
+<h3 id="一个很无聊的函数"><strong>一个很无聊的函数</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>) {</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">       	fmt.Println(msg, i)</div><div class="line">       	time.Sleep(time.Second)</div><div class="line">    }</div><div class="line">}</div></pre></td></tr></table></figure>
+
+
+<pre><code>显而易见，这个函数永不停歇的打印msg字符串，并且循环中间会<span class="keyword">sleep</span>一秒钟，接下来让我们不断改进这个函数。
+</code></pre><h3 id="嗯哼，稍微不那么无聊一点了"><strong>嗯哼，稍微不那么无聊一点了</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>) {</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">       	fmt.Println(msg, i)</div><div class="line">       	time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)</div><div class="line">    }</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<pre><code>我们看到这个函数不再是<span class="keyword">sleep</span>固定的时间，而是<span class="keyword">rand</span>出一个随机的duration。这样，可以让我们的这个无聊的函数稍微不可预期一点。
+</code></pre><h3 id="让我们把它run起来！~Let’s_go！"><strong>让我们把它run起来！~Let’s go！</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> main() {</div><div class="line"> 	boring(<span class="string">"boring!"</span>)</div><div class="line">}</div><div class="line"></div><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>) {</div><div class="line">    <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">        fmt.Println(msg, i)</div><div class="line">        time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)</div><div class="line">    }</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<pre><code>好了，无聊的函数跑起来了~~但是，目前我们还没有用到Goroutines的特性
+</code></pre><h3 id="让函数Go起来！"><strong>让函数Go起来！</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">package</span> main</div><div class="line"></div><div class="line"><span class="keyword">import</span> (</div><div class="line">    <span class="string">"fmt"</span></div><div class="line">    <span class="string">"math/rand"</span></div><div class="line">    <span class="string">"time"</span></div><div class="line">)</div><div class="line"></div><div class="line"><span class="keyword">func</span> main() {</div><div class="line">	<span class="keyword">go</span> boring(<span class="string">"boring!"</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<pre><code>程序的输出为：
+</code></pre><figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">[no output]</div><div class="line"></div><div class="line">Program exited.</div></pre></td></tr></table></figure>
+
+<pre><code>纳尼？？！！奇怪啊，为什么程序没有输出捏？其实真相是，main函数在开启boring方法的新的goroutine之后，没有等待boring方法调用fmt.<span class="keyword">Println</span>就急急忙忙返回退出了。当main退出之时，我们的程序自然而然也就退出了。
+</code></pre><h3 id="让我们等一下TA吧"><strong>让我们等一下TA吧</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> main() {</div><div class="line">	<span class="keyword">go</span> boring(<span class="string">"boring!"</span>)</div><div class="line">	fmt.Println(<span class="string">"I'm listening."</span>)</div><div class="line">	time.Sleep<span class="number">(2</span> * time.Second)</div><div class="line">	fmt.Println(<span class="string">"You're boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<pre><code>现在我们就可以在主程序退出之前看到boring函数输出的<span class="class"><span class="keyword">message</span>了。但是等等，我们现在还只是一个<span class="title">goroutine</span>，还没有涉及到真正意义上的并发。</span>
+</code></pre><h3 id="使用channels！"><strong>使用channels！</strong></h3>
+<pre><code>让我们先来看一个简单的使用channels进行同步的例子
+</code></pre><figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">var</span> syn <span class="keyword">chan</span> <span class="typename">int</span> = <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">int</span>)</div><div class="line"></div><div class="line"><span class="keyword">func</span> foo(){</div><div class="line">	<span class="keyword">for</span>(i :=<span class="number"> 0</span>; i &lt;<span class="number"> 5</span>; i++){</div><div class="line">		fmt.Println(<span class="string">"i am running!"</span>)</div><div class="line">	}</div><div class="line">	syn &lt;-<span class="number"> 1</span></div><div class="line">}</div><div class="line"></div><div class="line"><span class="keyword">func</span> main(){</div><div class="line">	<span class="keyword">go</span> foo()</div><div class="line">	&lt;- syn</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<pre><code>很简单吧，通过使用通道syn，可以进行简单的同步。这样，在main函数退出之间首先会在读取syn处阻塞，除非foo向syn写入数据。
+</code></pre><h3 id="让boring和main成为好基友"><strong>让boring和main成为好基友</strong></h3>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">func</span> boring(msg <span class="typename">string</span>, c <span class="keyword">chan</span> <span class="typename">string</span>) {</div><div class="line">   <span class="keyword">for</span> i :=<span class="number"> 0</span>; ; i++ {</div><div class="line">        c &lt;- fmt.Sprintf(<span class="string">"%s %d"</span>, msg, i)</div><div class="line">        time.Sleep(time.Duration(rand.Intn<span class="number">(1e3</span>)) * time.Millisecond)</div><div class="line">	}</div><div class="line">}</div><div class="line"></div><div class="line"><span class="keyword">func</span> main() {</div><div class="line">	c := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="typename">string</span>)</div><div class="line">	<span class="keyword">go</span> boring(<span class="string">"boring!"</span>, c)</div><div class="line"> 	<span class="keyword">for</span> i :=<span class="number"> 0</span>; i &lt;<span class="number"> 5</span>; i++ {</div><div class="line">    	fmt.Printf(<span class="string">"You say: %q\n"</span>, &lt;-c)</div><div class="line">    }</div><div class="line">    fmt.Println(<span class="string">"You're boring; I'm leaving."</span>)</div><div class="line">}</div></pre></td></tr></table></figure>
+
+<p>我们通过channel将main和boring联系起来，从而让本来毫无关系的他们能够自然地交流，从而知晓彼此的状态。上面程序便是通过channel来进行的同步。当main函数执行 <code>&lt;- c</code>时会发生阻塞，除非boring中执行<code>c &lt;- fmt.Sprintf(&quot;%s %d&quot;, msg, i)</code>向通道中写入数据才会解除阻塞。由此观之，即针对同一个channel，sender和receiver必须要一个读一个写才能使得channel畅通不阻塞。如此一来，便可以通过channel进行交流和同步</p>
+  
+	</div>
+		<footer class="article-footer clearfix">
+
+  <div class="article-tags">
+  
+  <span></span> <a href="/tags/Go/">Go</a><a href="/tags/goroutines/">goroutines</a>
+  </div>
+
+
+
+
+<div class="article-share" id="share">
+
+  <div data-url="http://www.nyankosama.com/2013/08/21/2013-08-21-goroutines-patterns/" data-title="Goroutines 并发模式（一） | Nyankosama&#39;s Blog" data-tsina="null" class="share clearfix">
+  </div>
+
+</div>
+</footer>   	       
+	</article>
+	
+<nav class="article-nav clearfix">
+ 
+ <div class="prev" >
+ <a href="/2013/08/21/2013-08-22-goroutines-patterns-two/" title="Goroutines 并发模式（二）">
+  <strong>PREVIOUS:</strong><br/>
+  <span>
+  Goroutines 并发模式（二）</span>
+</a>
+</div>
+
+
+</nav>
+
+	
+<section class="comment">
+	<div class="ds-thread"></div>
+</section>
+
+</div>  
+      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
+
+  <div id="toc" class="toc-aside">
+  <strong class="toc-title">Contents</strong>
+  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#前言"><span class="toc-number">1.</span> <span class="toc-text">前言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#并发而非并行"><span class="toc-number">2.</span> <span class="toc-text">并发而非并行</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#什么是Goroutines"><span class="toc-number">3.</span> <span class="toc-text">什么是Goroutines</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#让我们从几个例子开始"><span class="toc-number">4.</span> <span class="toc-text">让我们从几个例子开始</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#一个很无聊的函数"><span class="toc-number">4.1.</span> <span class="toc-text">一个很无聊的函数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#嗯哼，稍微不那么无聊一点了"><span class="toc-number">4.2.</span> <span class="toc-text">嗯哼，稍微不那么无聊一点了</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让我们把它run起来！~Let’s_go！"><span class="toc-number">4.3.</span> <span class="toc-text">让我们把它run起来！~Let’s go！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让函数Go起来！"><span class="toc-number">4.4.</span> <span class="toc-text">让函数Go起来！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让我们等一下TA吧"><span class="toc-number">4.5.</span> <span class="toc-text">让我们等一下TA吧</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#使用channels！"><span class="toc-number">4.6.</span> <span class="toc-text">使用channels！</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#让boring和main成为好基友"><span class="toc-number">4.7.</span> <span class="toc-text">让boring和main成为好基友</span></a></li></ol></li></ol>
+  </div>
+
+<div id="asidepart">
+<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
+<aside class="clearfix">
+<div id="authorInfo">
+	
+		<div class="author-logo"></div>		
+	
+	<div class="social-list" class="clearfix">
+		
+		<a href="http://weibo.com/nyankosama" target="_blank" title="weibo"></a>
+		
+		
+		
+		<a href="https://github.com/nyankosama" target="_blank" title="github"></a>
+		
+		
+		<a href="https://www.facebook.com/heliangrui" target="_blank" title="facebook"></a>
+		
+		
+	</div>
+</div>
+
+  
+
+  
+<div class="tagslist">
+	<p class="asidetitle">Tags</p>
+		<ul class="clearfix">
+		
+			<li><a href="/tags/Go/" title="Go">Go<sup>2</sup></a></li>
+		
+			<li><a href="/tags/git/" title="git">git<sup>2</sup></a></li>
+		
+			<li><a href="/tags/goroutines/" title="goroutines">goroutines<sup>2</sup></a></li>
+		
+		</ul>
+</div>
+
+
+  <div class="rsspart">
+	<a href="atom.xml" target="_blank" title="rss">RSS</a>
+</div>
+
+  
+  <div class="tagcloudlist">
+    <p class="asidetitle">Tag Cloud</p>
+    <div class="tagcloudlist clearfix">
+       <a href="/tags/Go/" style="font-size: NaNpx;">Go</a><a href="/tags/git/" style="font-size: NaNpx;">git</a><a href="/tags/goroutines/" style="font-size: NaNpx;">goroutines</a>
+    </div>
+  </div>
+
+
+</aside>
+</div>
+    </div>
+    <footer><div id="footer" >
+    
+            <p class="copyright"> © 2014 
+		
+		<a href="http://www.nyankosama.com" target="_blank" title="Liangrui He">Liangrui He</a>
+		
+            && Powered by <a href="http://hexo.io" target="_blank" title="hexo">hexo</a> && Theme by <a href="http://gengbiao.me" target="_blank" title="coney">coney</a>
+            </div>
+</footer>
+    <script src="/js/jquery-2.1.0.min.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){ 
+  $('.navbar').click(function(){
+    $('header nav').toggleClass('shownav');
+  });
+  var myWidth = 0;
+  function getSize(){
+    if( typeof( window.innerWidth ) == 'number' ) {
+      myWidth = window.innerWidth;
+    } else if( document.documentElement && document.documentElement.clientWidth) {
+      myWidth = document.documentElement.clientWidth;
+    };
+  };
+  var m = $('#main'),
+      a = $('#asidepart'),
+      c = $('.closeaside'),
+      o = $('.openaside');
+  $(window).resize(function(){
+    getSize(); 
+    if (myWidth >= 1024) {
+      $('header nav').removeClass('shownav');
+    }else
+    {
+      m.removeClass('moveMain');
+      a.css('display', 'block').removeClass('fadeOut');
+      o.css('display', 'none');
+      
+      $('#toc.toc-aside').css('display', 'none');
+        
+    }
+  });
+  c.click(function(){
+    a.addClass('fadeOut').css('display', 'none');
+    o.css('display', 'block').addClass('fadeIn');
+    m.addClass('moveMain');
+  });
+  o.click(function(){
+    o.css('display', 'none').removeClass('beforeFadeIn');
+    a.css('display', 'block').removeClass('fadeOut').addClass('fadeIn');      
+    m.removeClass('moveMain');
+  });
+  $(window).scroll(function(){
+    o.css("top",Math.max(80,260-$(this).scrollTop()));
+  });
+});
+</script>
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var ai = $('.article-content>iframe'),
+      ae = $('.article-content>embed'),
+      t  = $('#toc'),
+      h  = $('article h2')
+      ah = $('article h2'),
+      ta = $('#toc.toc-aside'),
+      o  = $('.openaside'),
+      c  = $('.closeaside');
+  if(ai.length>0){
+    ai.wrap('<div class="video-container" />');
+  };
+  if(ae.length>0){
+   ae.wrap('<div class="video-container" />');
+  };
+  if(ah.length==0){
+    t.css('display','none');
+  }else{
+    c.click(function(){
+      ta.css('display', 'block').addClass('fadeIn');
+    });
+    o.click(function(){
+      ta.css('display', 'none');
+    });
+    $(window).scroll(function(){
+      ta.css("top",Math.max(140,320-$(this).scrollTop()));
+    });
+  };
+});
+</script>
+
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var $this = $('.share'),
+      url = $this.attr('data-url'),
+      encodedUrl = encodeURIComponent(url),
+      title = $this.attr('data-title'),
+      tsina = $this.attr('data-tsina');
+  var html = [
+  '<a href="#" class="overlay" id="qrcode"></a>',
+  '<div class="qrcode clearfix"><span>扫描二维码分享到微信朋友圈</span><a class="qrclose" href="#share"></a><strong>Loading...Please wait</strong><img id="qrcode-pic" data-src="http://s.jiathis.com/qrcode.php?url=' + encodedUrl + '"/></div>',
+  '<a href="#textlogo" class="article-back-to-top" title="Top"></a>',
+  '<a href="https://www.facebook.com/sharer.php?u=' + encodedUrl + '" class="article-share-facebook" target="_blank" title="Facebook"></a>',
+  '<a href="#qrcode" class="article-share-qrcode" title="QRcode"></a>',
+  '<a href="https://twitter.com/intent/tweet?url=' + encodedUrl + '" class="article-share-twitter" target="_blank" title="Twitter"></a>',
+  '<a href="http://service.weibo.com/share/share.php?title='+title+'&url='+encodedUrl +'&ralateUid='+ tsina +'&searchPic=true&style=number' +'" class="article-share-weibo" target="_blank" title="Weibo"></a>',
+  '<span title="Share to"></span>'
+  ].join('');
+  $this.append(html);
+  $('.article-share-qrcode').click(function(){
+    var imgSrc = $('#qrcode-pic').attr('data-src');
+    $('#qrcode-pic').attr('src', imgSrc);
+    $('#qrcode-pic').load(function(){
+        $('.qrcode strong').text(' ');
+    });
+  });
+});     
+</script>
+
+
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"null"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script> 
+
+
+
+
+
+<script>
+    
+        var _bdImg = '4';
+    
+    window._bd_share_config={
+        "common":{
+            "bdSnsKey":{
+
+            },
+            "bdText":"",
+            "bdMini":"2",
+            "bdMiniList":[
+                "qzone",
+                "tsina",
+                "weixin",
+                "renren",
+                "tqq",
+                "tieba",
+                "douban",
+                "sqq",
+                "diandian",
+                "huaban",
+                "youdao",
+                "mail",
+                "ty",
+                "fbook",
+                "twi",
+                "linkedin",
+                "copy",
+                "print"
+            ],
+            "bdPic":"",
+            "bdStyle":"0",
+            "bdSize":"16"
+        },
+        "slide":{
+            "type":"slide",
+            "bdImg":_bdImg,
+            "bdPos":"right",
+            "bdTop":"350"
+        },
+        "image":{
+            "viewList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ],
+            "viewText":"分享：",
+            "viewSize":"16"
+        },
+        "selectShare":{
+            "bdContainerClass":null,
+            "bdSelectMiniList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ]
+        }
+    };
+    with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?v=89860593.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+
+
+
+
+  </body>
+</html>
+
