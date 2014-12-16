@@ -76,7 +76,7 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
     </p>
   <p class="article-time">
     <time datetime="2014-12-15T10:49:01.000Z" itemprop="datePublished">12月 15 2014</time>
-    Updated:<time datetime="2014-12-15T15:52:05.000Z" itemprop="dateModified">12月 15 2014</time>
+    Updated:<time datetime="2014-12-16T06:03:13.000Z" itemprop="dateModified">12月 16 2014</time>
     
   </p>
 </header>
@@ -85,7 +85,7 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 		
 		<div id="toc" class="toc-article">
 			<strong class="toc-title">Contents</strong>
-		<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础知识"><span class="toc-number">1.</span> <span class="toc-text">基础知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#ForkJoinPool"><span class="toc-number">1.1.</span> <span class="toc-text">ForkJoinPool</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Akka源码分析"><span class="toc-number">2.</span> <span class="toc-text">Akka源码分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#从一个示例开始"><span class="toc-number">2.1.</span> <span class="toc-text">从一个示例开始</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Akka中主要几个类的协作"><span class="toc-number">2.2.</span> <span class="toc-text">Akka中主要几个类的协作</span></a></li></ol></li></ol>
+		<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础知识"><span class="toc-number">1.</span> <span class="toc-text">基础知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#ForkJoinPool"><span class="toc-number">1.1.</span> <span class="toc-text">ForkJoinPool</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Akka源码分析"><span class="toc-number">2.</span> <span class="toc-text">Akka源码分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#从一个示例开始"><span class="toc-number">2.1.</span> <span class="toc-text">从一个示例开始</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Akka中几个主要对象之间的协作"><span class="toc-number">2.2.</span> <span class="toc-text">Akka中几个主要对象之间的协作</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorSystem"><span class="toc-number">2.2.1.</span> <span class="toc-text">ActorSystem</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorRef"><span class="toc-number">2.2.2.</span> <span class="toc-text">ActorRef</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorCell"><span class="toc-number">2.2.3.</span> <span class="toc-text">ActorCell</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorRefProvider"><span class="toc-number">2.2.4.</span> <span class="toc-text">ActorRefProvider</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#MessageDispatcher"><span class="toc-number">2.2.5.</span> <span class="toc-text">MessageDispatcher</span></a></li></ol></li></ol></li></ol>
 		</div>
 		
 		<h2 id="基础知识">基础知识</h2>
@@ -112,7 +112,8 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 <p>上面这一段代码建立了一个测试Actor，main方法创建ActorSystem，由此获得测试Actor的ActorRef，并且向其发送了一条内容为”test”消息。如果我们运行这段程序的话将会有下面的输出：</p>
 <pre><code><span class="attr_selector">[INFO]</span> <span class="attr_selector">[12/15/2014 21:36:24.524]</span> <span class="attr_selector">[testSystem-akka.actor.default-dispatcher-3]</span> <span class="attr_selector">[akka://testSystem/user/actorTest]</span> <span class="tag">received</span> <span class="tag">test</span>
 </code></pre><p>代表ActorTest收到了消息，向log输出了”received test”，这是一个非常简单的例子，下面就将从这个例子开始来分析源码的调用路径以及各个类之间的协作过程。</p>
-<h3 id="Akka中主要几个类的协作">Akka中主要几个类的协作</h3>
+<h3 id="Akka中几个主要对象之间的协作">Akka中几个主要对象之间的协作</h3>
+<h4 id="ActorSystem">ActorSystem</h4>
 <p>根据上面的例子，下面依次简要介绍akka中几个主要的class的作用以及依赖关系。</p>
 <p>首先，ActorSystem是一组共享同一个配置的actor的管理者和外部接口，一般我们从同一个JVM中只会创建一个ActorSystem并通过这个ActorSystem来进一步去构建各种actor，从而是系统运行起来。在ActorSystem中包含一系列的actor以及系统相关的属性，例如actorPath、scheduler、默认的dispacher等等，除此之外还有一系列的接口。ActorSystem是一个抽象类，其具体实现类为ActorSystemImpl。当我们调用ActorSystem(“testSystem”)时，实际调用了其伴生对象的apply方法，该方法获取相应的classLoader和settings之后，初始化ActorSystemImpl并返回ActorSystem引用</p>
 <p>ActorSystemImpl在初始化时主要做了以下几件事：</p>
@@ -124,8 +125,19 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 <li>初始化默认的dispacher（即Dispatcher类）</li>
 <li>调用start方法做一些其他的初始化工作，准备好ActorSystem提供给Client使用</li>
 </ul>
-<p>下面详细介绍ActorSystemImpl中持有的几个重要的引用：</p>
-<p>//To be continued</p>
+<p>下面详细介绍ActorSystemImpl中持有的几个重要的引用</p>
+<h4 id="ActorRef">ActorRef</h4>
+<p>此类是一个不可变的代表实际Actor的句柄，在Client端我们对于所有Actor的直接访问都是通过ActorRef来进行的，这里提供一系列Client端可用的操作Actor的方式，比如发送消息等等。ActorRef类是一个抽象类，在上面这个简单的示例中，具体的实现类为LocalActorRef。</p>
+<h4 id="ActorCell">ActorCell</h4>
+<p>在ActorRef中，其只提供相应对于Actor操作的一层封装，而具体的实现是delegate给ActorCell来做的。ActorCell是Akka中的内部API，被标记为<code>private[akka]</code>，我们从外部无法访问到这个类。总的来说，大部分具体的Actor的行为都是delegate到这个内部类来做的。可以认为每一个ActorRef持有一个ActorCell。</p>
+<h4 id="ActorRefProvider">ActorRefProvider</h4>
+<p>顾名思义，这个类提供一系列的对ActorRef的构建及相关的操作。其中的<code>actorOf</code>方法是所有构造Client或者Actor中构造新的ActorRef时最终会调用的方法，也就是说所有的其他的地方的构造actor的调用最终会delegate到这个类来做。除此之外，ActorRefProvider还持有一系列的系统级的对象，如guardian actor、system guardian actor、dead letters actor、settings等等。ActorSystem以及ActorContext都持有ActorRefProvider相同的引用，ActorSystem以及ActorContext初始化时会先初始化ActorRefProvider，然后再用其相关的变量初始化自身的一些参数。我们注意到ActorRefProvider是一个<code>trait</code>。在示例中具体的实现类为LocalActorRefProvider</p>
+<h4 id="MessageDispatcher">MessageDispatcher</h4>
+<p>该类以及其相关的子类根据不同的配置情况实现了最主要的消息分发以及处理的主要逻辑。以示例中的场景为例，这里在系统中akka共用同一个MessageDispatcher对象。然而在表现形式上，ActorSystem持有一个默认的MessageDispatcher，每一个ActorCell持有相应的MessageDispatcher的引用。现在先记住，所有的在Client端的消息发送的操作，最终都会delegate到相应的ActorRef对应的ActorCell的MessageDispatcher上，并且最终调用MessageDispatcher的dispatch方法。这里给出MessageDispatcher默认的实现方法的一段代码，如下：</p>
+<figure class="highlight scala"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">protected</span>[akka] <span class="keyword">def</span> dispatch(receiver: ActorCell, invocation: Envelope): Unit = {</div><div class="line">    <span class="keyword">val</span> mbox = receiver.mailbox <span class="comment">//获取receiver对应的mailbox</span></div><div class="line">    mbox.enqueue(receiver.self, invocation) <span class="comment">//将消息入队mailbox</span></div><div class="line">    registerForExecution(mbox, <span class="keyword">true</span>, <span class="keyword">false</span>) <span class="comment">//将Task提交到底层的ForkJoinPool中执行</span></div><div class="line">  }</div></pre></td></tr></table></figure>
+
+<p>代码已经非常清晰，在这里就不做过多解释。</p>
+<p>To be continued.</p>
   
 	</div>
 		<footer class="article-footer clearfix">
@@ -175,7 +187,7 @@ ForkJoinPool是Java 1.7之后新添加的一个ExecutorService实现，在java.u
 
   <div id="toc" class="toc-aside">
   <strong class="toc-title">Contents</strong>
-  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础知识"><span class="toc-number">1.</span> <span class="toc-text">基础知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#ForkJoinPool"><span class="toc-number">1.1.</span> <span class="toc-text">ForkJoinPool</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Akka源码分析"><span class="toc-number">2.</span> <span class="toc-text">Akka源码分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#从一个示例开始"><span class="toc-number">2.1.</span> <span class="toc-text">从一个示例开始</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Akka中主要几个类的协作"><span class="toc-number">2.2.</span> <span class="toc-text">Akka中主要几个类的协作</span></a></li></ol></li></ol>
+  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#基础知识"><span class="toc-number">1.</span> <span class="toc-text">基础知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#ForkJoinPool"><span class="toc-number">1.1.</span> <span class="toc-text">ForkJoinPool</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Akka源码分析"><span class="toc-number">2.</span> <span class="toc-text">Akka源码分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#从一个示例开始"><span class="toc-number">2.1.</span> <span class="toc-text">从一个示例开始</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Akka中几个主要对象之间的协作"><span class="toc-number">2.2.</span> <span class="toc-text">Akka中几个主要对象之间的协作</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorSystem"><span class="toc-number">2.2.1.</span> <span class="toc-text">ActorSystem</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorRef"><span class="toc-number">2.2.2.</span> <span class="toc-text">ActorRef</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorCell"><span class="toc-number">2.2.3.</span> <span class="toc-text">ActorCell</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ActorRefProvider"><span class="toc-number">2.2.4.</span> <span class="toc-text">ActorRefProvider</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#MessageDispatcher"><span class="toc-number">2.2.5.</span> <span class="toc-text">MessageDispatcher</span></a></li></ol></li></ol></li></ol>
   </div>
 
 <div id="asidepart">
