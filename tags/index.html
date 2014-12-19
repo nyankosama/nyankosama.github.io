@@ -1,5 +1,5 @@
 
-  <!DOCTYPE HTML>
+ <!DOCTYPE HTML>
 <html lang="zh-cn">
 <head>
   <meta charset="UTF-8">
@@ -7,7 +7,7 @@
   <meta name="360-site-verification" content="67fbcc5a67f4c65c057315b28fa0b2c8" />
 <meta name="google-site-verification" content="2GzxQ0VtXwTSUdmGm6DzcmhTzM_I9QmzCb_pzpMzD88" />
   
-    <title>Tag: git | Nyankosama&#39;s Blog</title>
+    <title>Tag: undefined | Nyankosama&#39;s Blog</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=3, minimum-scale=1">
     
     <meta name="author" content="Liangrui He">
@@ -63,42 +63,35 @@
 
       </header>
       <div id="container">
-        
-
+          
 <div class="archive-title" >
-  <h2 class="tag-icon">git</h2>
-  
+<h2 class="tag-icon">Tags</h2>
+
+<a data-src="/tags/Go/" href="#Go" title="Go">Go<sup>2</sup></a>
+
+<a data-src="/tags/MySQL/" href="#MySQL" title="MySQL">MySQL<sup>1</sup></a>
+
+<a data-src="/tags/akka/" href="#akka" title="akka">akka<sup>1</sup></a>
+
+<a data-src="/tags/git/" href="#git" title="git">git<sup>2</sup></a>
+
+<a data-src="/tags/goroutines/" href="#goroutines" title="goroutines">goroutines<sup>2</sup></a>
+
+<a data-src="/tags/源码分析/" href="#源码分析" title="源码分析">源码分析<sup>1</sup></a>
+
+<a data-src="/tags/索引/" href="#索引" title="索引">索引<sup>1</sup></a>
+
 </div>
-<div id="main" class="archive-part clearfix">
-  <div id="archive-page">
-
-
-  <section class="post" itemscope itemprop="blogPost">
-  
-    <a href="/2013/10/17/2013-10-17-git-develop-model-two/" title="git版本控制开发流程小结笔记（二）" itemprop="url">
-  
-      <time datetime="2013-10-17T05:58:00.000Z" itemprop="datePublished">10月 17 2013</time>
-    <h1 itemprop="name">git版本控制开发流程小结笔记（二）</h1>
-    
-  </a>
-</section>
-
-  <section class="post" itemscope itemprop="blogPost">
-  
-    <a href="/2013/10/16/2013-10-16-git-develop-model/" title="git版本控制开发流程小结笔记（一）" itemprop="url">
-  
-      <time datetime="2013-10-16T10:41:00.000Z" itemprop="datePublished">10月 16 2013</time>
-    <h1 itemprop="name">git版本控制开发流程小结笔记（一）</h1>
-    
-  </a>
-</section>
-
-
-  </div>
+<div id="main" class="archive-part">
+<div class="all-list-box"></div>
 </div>
 
-    </div>
-    <footer><div id="footer" >
+
+
+
+         %>
+      </div>
+      <footer><div id="footer" >
     
             <p class="copyright"> © 2014 
 		
@@ -155,6 +148,24 @@ $(document).ready(function(){
 
 
 
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var list    = $('.archive-title a'),
+      box     = $('.all-list-box'),
+      first   = $('.archive-title a:first-of-type');
+      box.load(first.attr('data-src').toString()+' #archive-page');
+      first.addClass('current');
+  list.each(function(){
+    $(this).click(function(){
+      var listSrc=$(this).attr('data-src').toString()+' #archive-page';
+      box.load(listSrc);
+      list.removeClass('current');
+      $(this).addClass('current');
+     });  
+    });
+  }); 
+</script>
 
 
 
