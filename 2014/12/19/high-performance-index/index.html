@@ -1,0 +1,542 @@
+
+ <!DOCTYPE HTML>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="baidu_union_verify" content="d1952c66cf48912e21c18c7c581f382a">
+  <meta name="360-site-verification" content="67fbcc5a67f4c65c057315b28fa0b2c8" />
+<meta name="google-site-verification" content="2GzxQ0VtXwTSUdmGm6DzcmhTzM_I9QmzCb_pzpMzD88" />
+  
+    <title>高性能索引策略初探 | Nyankosama&#39;s Blog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=3, minimum-scale=1">
+    
+    <meta name="author" content="Liangrui He">
+    
+    <meta name="description" content="1. 引言
+随着互联网时代地到来，各种各样的基于互联网的应用和服务进入了人们的视线。然而这样各种各样的应用都是由成千上万的后端服务所支撑起来的，这些服务每天处理着海量的请求承载着巨大的压力。随着用户量的增加，逐渐地这些后端服务的某一个部分就会成为整个应用水平扩展的瓶颈，然而往往这个瓶颈就是存在于数据">
+    
+    
+    
+    
+    <link rel="alternate" href="atom.xml" title="Nyankosama&#39;s Blog" type="application/atom+xml">
+    
+    
+    
+    <link rel="stylesheet" href="/css/style.css" type="text/css">
+
+     
+</head>
+
+  <body>
+    <header>
+      <div>
+		
+			<div id="textlogo">
+				<h1 class="site-name"><a href="/" title="Nyankosama&#39;s Blog">Nyankosama&#39;s Blog</a></h1>
+				<a class="blog-motto">为了变成大魔王而日夜不停地努力中~~~ ヾ(≧へ≦)〃</a>
+			</div>
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
+			</a></div>
+			<nav class="animated">
+				<ul>
+					<ul>
+					 
+						<li><a href="/">首页</a></li>
+					
+						<li><a href="/archives">归档</a></li>
+					
+						<li><a href="/about">关于</a></li>
+					
+					<li>
+					
+					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
+						<label>Search</label>
+						<input type="text" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
+						<input type="hidden" name="q" value="site:www.nyankosama.com">
+					</form>
+					
+					</li>
+				</ul>
+                            </nav>			
+</div>
+
+    </header>
+    <div id="container">
+      <div id="main" class="post" itemscope itemprop="blogPost">
+	<article itemprop="articleBody"> 
+		<header class="article-info clearfix">
+  <h1 itemprop="name">
+    
+      <a href="/2014/12/19/high-performance-index/" title="高性能索引策略初探" itemprop="url">高性能索引策略初探</a>
+  </h1>
+  <p class="article-author">By
+    
+      <a href="http://www.nyankosama.com" title="Liangrui He">Liangrui He</a>
+    </p>
+  <p class="article-time">
+    <time datetime="2014-12-19T09:24:33.000Z" itemprop="datePublished">12月 19 2014</time>
+    Updated:<time datetime="2014-12-19T09:29:13.000Z" itemprop="dateModified">12月 19 2014</time>
+    
+  </p>
+</header>
+	<div class="article-content">
+		
+		
+		<div id="toc" class="toc-article">
+			<strong class="toc-title">Contents</strong>
+		<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-_引言"><span class="toc-text">1. 引言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-_索引优化评判标准"><span class="toc-text">2. 索引优化评判标准</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1_三星系统"><span class="toc-text">2.1 三星系统</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2_EXPLAIN语句"><span class="toc-text">2.2 EXPLAIN语句</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3_基准测试"><span class="toc-text">2.3 基准测试</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-_提升索引性能"><span class="toc-text">3. 提升索引性能</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1_选择性最大原理"><span class="toc-text">3.1 选择性最大原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2_频率最大原理"><span class="toc-text">3.2    频率最大原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3_为排序而设计索引"><span class="toc-text">3.3    为排序而设计索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-4_使用聚簇索引"><span class="toc-text">3.4    使用聚簇索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-5_使用覆盖索引"><span class="toc-text">3.5    使用覆盖索引</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-_减少索引占用空间"><span class="toc-text">4. 减少索引占用空间</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1_使用前缀索引"><span class="toc-text">4.1    使用前缀索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2_索引压缩技术"><span class="toc-text">4.2    索引压缩技术</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-_优化SQL语句"><span class="toc-text">5. 优化SQL语句</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#5-1_多条件查询索引设计"><span class="toc-text">5.1    多条件查询索引设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-2_索引不作为的原因"><span class="toc-text">5.2    索引不作为的原因</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-_总结"><span class="toc-text">6. 总结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-_引用"><span class="toc-text">7. 引用</span></a></li></ol>
+		</div>
+		
+		<h2 id="1-_引言">1. 引言</h2>
+<p>随着互联网时代地到来，各种各样的基于互联网的应用和服务进入了人们的视线。然而这样各种各样的应用都是由成千上万的后端服务所支撑起来的，这些服务每天处理着海量的请求承载着巨大的压力。随着用户量的增加，逐渐地这些后端服务的某一个部分就会成为整个应用水平扩展的瓶颈，然而往往这个瓶颈就是存在于数据库。为此，对设计并维护一个高性能的数据库服务就成为了当今海量高负载服务的一个至关重要的一环。</p>
+<p>对于高性能数据库而言，最为重要的一个评判标准就在于其响应性的高低，具体而言就是其Query的响应时间，当然这个时间越小越好。为了达成这个一个目标，我们便需要对表的结构的各个方面、应用层的逻辑、数据库的相关存储引擎等方面做出设计选择和优化。其中，非常重要的一个环节就是对于数据库索引的设计和优化。一个经过良好设计和优化的索引，不仅能够减少数据库的CPU负载和内存占用量、提升数据库的处理性能，还能配合应用层优化后的SQL语句极大减少数据的访问量、降低响应时间。除此之外，还能和相关的数据库技术进行结合，达到许多事半功倍的效果。然而，数据库索引也是一把双刃剑，对于一个设计失败的索引结构，会使得数据的访问量大大增加、插入性能大大下降、增加响应时间，甚至很多时候其性能还不如全表扫描。</p>
+<p>为此，本篇博客主要围绕着MySQL数据库索引设计的相关知识，针对索引设计的一系列子问题做出探讨，以总结归纳出在不同的应用场景下最适合的索引设计策略。</p>
+<h2 id="2-_索引优化评判标准">2. 索引优化评判标准</h2>
+<h3 id="2-1_三星系统">2.1 三星系统</h3>
+<p>三星系统（three-star system）是由Lahdenmaki和Leach的书中提出的一个初步判定索引设计好坏的一个标准，如果被评判为三星的话，则索引设计基本可以算是比较完美了。那么三星系统具体的定义为：索引将相关记录放到一起为一星；索引中的数据顺序和查找中的排列顺序一致为二星；索引列包含查询中需要的全部列则为三星。</p>
+<p>首先一星系统需要满足索引将相关记录放到一起，注意这个要求的措辞是只需要放到一起就行了，而不需要关心索引列的排列顺序。那么这其实是非常简单的一个设计原则，通常情况下我们都能够使得索引系统成为一个一星系统，我们只需要简单地将我们所关系得列以及经常需要查询得列放到索引中即可，不管这些索引列的是单独的多列索引还是组合索引。显然，这样的一星系统最多只能优化一些非常简单的查询结构，对于一些复杂的插叙结果以及排序和分组的情况，这样的索引将无法发挥作用，最终仍然是全表扫描。</p>
+<p>其次，对于一星系统我们加上一个顺序的限制，即需要是的查询的SQL和索引列的顺序保持一致。一般情况下，我应该需要尽可能地是的索引设计达到一个二星系统的标准，因为只有当查询顺序和索引列的顺序保持一致时，查询才能发挥出全部索引列的作用，而不用额外地去扫描其他的行。这样一来，就要求我们在进行索引设计时需要充分考虑所需要的各个场景下的查询的结构，平衡出一种最好的索引列排序方案，尽量使得更多的查询符合二星系统。</p>
+<p>最后，对于三星系统而言，我们在二星系统的基础上再加强条件，使得查询的所有条件列均在索引的覆盖范围内并且与索引顺序一致，这样就能使得查询只需要读取索引就能够确定数据行的位置。这种三星系统可以说是索引设计比较完美的效果，当然如果更进一步我们所需要查询的数据全部都被索引所覆盖（这其实是覆盖索引），那么我们连数据行都不用访问，直接访问索引就可以完成查询。因此，这样的查询是具有极高的性能的。</p>
+<p>在设计索引时，我应该时刻关注“三星系统”的评判标准，是的索引设计尽可能的达到三星系统，这样才能使得数据库的性能最大化。</p>
+<h3 id="2-2_EXPLAIN语句">2.2 EXPLAIN语句</h3>
+<p>在判定某索引设计是否可以满足某一些列特定查询时，我们可以使用MySQL中的内建命令EXPLAIN来查看MySQL引擎对该查询的执行分析情况。例如，表sakila.inventory有一个多列索引（store_id, film_id），对于如下查询：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">SELECT</span> store_id, film_id <span class="keyword">FROM</span> sakila.inventory;</span></div></pre></td></tr></table></figure>
+
+<p>如果我们在查询语句前加上EXPLAIN关键字，即：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">EXPLAIN</span> <span class="keyword">SELECT</span> store_id, film_id <span class="keyword">FROM</span> sakila.inventory;</span></div></pre></td></tr></table></figure>
+
+<p>我们将的到MySQL对该语句的处理过程的分析，如图所示：</p>
+<p><img src="/images/1418976950125.png" alt="Alt text"></p>
+<p>我们可以看到在Extra列中有Using index，这就代表这个查询是一个覆盖查询，完全使用了索引来查询数据。</p>
+<p>因此，类似的一些场景我们都可以使用EXPLAIN功能来检验我们的索引设计是否可以适用于各种各样的查询语句，特别需要注意的就是Extra列。当Extra列与我们期望的不一样时，就代表索引设计或者查询语句并没有达到最优，需要重新考虑设计。</p>
+<h3 id="2-3_基准测试">2.3 基准测试</h3>
+<p>当我们基本完成对数据库的设计的时候想要在真正上线前小规模验证一下系统的正确性的时候，我们应该对数据库做一个基准测试（benchmark）。所谓基准测试就是通过一些特定的方法对数据库注入可以模拟真实线上场景的数据，并根据预先设计好的Query请求，通过合适的手段模拟真实线上的请求，从而度量在这种模拟场景下数据库的工作情况。</p>
+<p>在基准测试中我们应该关注吞吐量、响应时间或者延迟、并发性以及可扩展性这几个指标。通过观察测试报告和一些日志，我们可以发现在各个请求场景下数据库的工作性能，并且能够发现出某些特殊的低性能的查询或者场景，从而做出有针对性的改善和优化工作。</p>
+<h2 id="3-_提升索引性能">3. 提升索引性能</h2>
+<p>日常的数据库表设计的过程中，在索引设计这一环，我们往往很难发挥出索引的最大性能，对于复杂的逻辑场景更是经常顾此失彼。在这一小节中，我们将提出一些常见场景下通用的索引设计准则和策略，以使得索引获得最大的效能，减少数据库系统的平均响应时间。</p>
+<h3 id="3-1_选择性最大原理">3.1 选择性最大原理</h3>
+<p>首先，我们需要定义数据库表中某一列的选择性。我们可以通过如下公式来计算某一列数据的选择性大小：S = C / #T。其中S(Selectivity)为选择性，C(Cardinality)为基数，即不重复的索引值，#T为记录总数。不看抽象的公式，我们可以用非常简单通俗的定义来理解选择性，即选择性为某一索引列不重复的值的比例。选择性越大意味着不重复的值的比例越高，对于B树索引而言，我们更期望与不重复值比例越高的列作为B树索引的索引列，这样一来B树索引便能有效地过滤掉大部分数据行，从而确定数据行的具体为止或者将数据行局限在一个可以接受的范围之内。然而在大部分情况下，我们所使用的索引均为B树索引，所以通常情况下，我们在设计数据库索引的时候应该考虑索引列的选择性。</p>
+<p>考虑到索引的顺序，这里提出一个通用的策略，如果没有特别的理由（如排序，索引列出现频率等等）在大部分情况下将选择性最大的列排在索引列的最前面最好的。就像之前讨论过的一样，将选择性最大的索引列排在最前面可以有效过滤掉最多的数据行。由于排在最前面，所以每一个涉及到这个索引列的查询也能在扫描第一个索引列的时候过滤掉大多数行，从而将剩余的少数行留给后续的索引进行过滤。总而言之，这样一来，相关的查询在通常情况下几乎总是能够访问最少的数据行，从而提升数据库的索引性能。</p>
+<p>其次，通常情况下，我们考虑的都是整列数值作为索引。当然，如果在某些情况下（比如BLOB、TEXT），我们可以考虑前缀索引的选择性。如果前缀索引的选择性足够高，也可以将此索引排在索引列的最开始处。因此，我们必须要选择一个合适的前缀索长度，在这里可以选择计算不同前缀的选择性，选择一个比较接近于整列值索引选择性的前缀长度即可。</p>
+<p>我们可以通过如下简单的SQL语句来计算某个索引列的选择性大小。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">SELECT</span> <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> col1)/<span class="keyword">COUNT</span>(*) <span class="keyword">FROM</span> A;</span></div></pre></td></tr></table></figure>
+
+<p>不仅如此，我们还可以通过如下简单的SQL语句来判断选择多少长度的前缀索引才能使得选择性最接近与整列值的选择性。现假设有一个sakila.city_demo表，其中有一列类型为varchar的city列，记录了各个不同城市的名字，我们需要得出最合适的前缀长度。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">SELECT</span> </span></div><div class="line">    <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> <span class="keyword">LEFT</span>(city, <span class="number">3</span>))/<span class="keyword">COUNT</span>(*) <span class="keyword">AS</span> sel3,</div><div class="line">    <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> <span class="keyword">LEFT</span>(city, <span class="number">4</span>))/<span class="keyword">COUNT</span>(*) <span class="keyword">AS</span> sel4,</div><div class="line">    <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> <span class="keyword">LEFT</span>(city, <span class="number">5</span>))/<span class="keyword">COUNT</span>(*) <span class="keyword">AS</span> sel5,</div><div class="line">    <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> <span class="keyword">LEFT</span>(city, <span class="number">6</span>))/<span class="keyword">COUNT</span>(*) <span class="keyword">AS</span> sel6,</div><div class="line">    <span class="keyword">COUNT</span>(<span class="keyword">DISTINCT</span> <span class="keyword">LEFT</span>(city, <span class="number">7</span>))/<span class="keyword">COUNT</span>(*) <span class="keyword">AS</span> sel7</div><div class="line"><span class="keyword">FROM</span> sakila.city_demo</div></pre></td></tr></table></figure>
+
+<p><strong>运行结果如下图所示：</strong></p>
+<p><img src="/images/1418980623314.png" alt="Alt text"></p>
+<p>可以看到当前缀长度为7时已经十分接近于整列值的选择性，因此我们可以选择这个长度作为前缀索引的长度。</p>
+<p>但是有几种情况我们不能直接使用选择性最大原理，需要进行一些优化或是转换，包括：排序分组相关场景、频率最大原理场景以及在某些列的某些值的基数大于正常值的时候。对于排序分组以及频率最大原理将在下面的小节进行讨论。对于某写值的基数大于正常值的这种情况，比如说有一列user记录了登录用户的用户名，然后系统也允许匿名登录，所有的匿名登录用户将被自动赋予guest的用户名。如果系统有大量匿名用户的时候，此时就会有大量的user列的值为guest的行，这样对于某些设计到匿名用户的查询就会使得选择性下降甚至变成全表扫描。在这样的场景下，解决办法也是非常简单，我们只需要把这种特殊值的列在表设计上独立开来，避免这样的情况发生即可。</p>
+<h3 id="3-2_频率最大原理">3.2    频率最大原理</h3>
+<p>在3.1节中我们介绍了选择性最大的这个普适的原理，然而选择性最大有一个最长遇到的问题就是，对于某些选择性不是很大但是几乎每一个查询都会用到的索引列，这一条原理其实并不适用。</p>
+<p>让我们来举一个例子，考虑一个婚恋交友网站，用户需要查询其他注册用户的信息。很明显，几乎所有关于用户的查询都必须指定对方的性别，但是性别只是一个枚举值，选择性非常低。在这种情况下，我们就不能再单单考虑选择性最大原理，对于像性别这种大多数查询都会涉及到的索引列，则必须放在索引组合的最前面。我们可以将这样的策略总结为频率最大原理。给出一个通俗的解释，即如果某一些列在各种不同的查询中出现的频率足够大，我们就优先考虑把这种出现频率比较大的索引列排在索引组合的最前面，其次再考虑选择性最大原理。</p>
+<p>但是，这里可能有一个问题，对于这种选择性不大频率出现很高的索引列，一般情况都是值选择有限的枚举类型，例如性别等等。由于这里把这种列排在索引组合的最前，因此我们无法对它使用范围查询，因为索引的作用总是止步于范围查询，这样实际上就丢掉了很多查询设计的灵活性。其实不然，对于这种值个数非常有限的枚举类型，我们可以使用IN子句来把范围查询转换为多次选择，MySQL在碰到对索引列组合前缀的IN查询的时候，会把IN的条件一个一个对应到后续的查询列，转换为可以应用索引的查询方式。举例来说，对于前面的性别查询，假如我们男女都想要搜索，我们可以设计如下的SQL语句：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> <span class="keyword">user</span> <span class="keyword">where</span> sex <span class="keyword">IN</span> (<span class="string">"male"</span>, <span class="string">"female"</span>) <span class="keyword">and</span> ....;</span></div></pre></td></tr></table></figure>
+
+<p>但是如果枚举值个数比较多，比如说地区城市之类动则上百个的话，则不适用与这种查询设计方式。</p>
+<p>总而言之，频率最大原理需要根据具体情况具体考虑，当某个列确实经常被查询用到，于是就可以提升该列在选择性最大原理中的地位。</p>
+<h3 id="3-3_为排序而设计索引">3.3    为排序而设计索引</h3>
+<p>我们知道，如果要对一个查询的结果进行排序，在MySQL默认实现中使用归并排序，需要读出相应的数据行并在MySQL内存进行排序，根据情况还有再写回缓冲区。这样排序如果数据量比较大的话，会非常消耗CPU和内存，使MySQL的效率降低。但当我们使用索引来排序之后，最好的情况下顺序扫描索引的输出就是最后排序的结果。如果查找的数据行没有被索引覆盖还需要读取一次物理行，当查找的数据被索引覆盖（即成为覆盖索引）时，我们甚至连数据行都不用读取，直接扫描索引就可以得到最终的结果。这样的索引排序操作极大地提高了排序的性能，因此在涉及到需要排序的操作时，我们应该尽可能使用索引来排序。当使用索引进行排序的时候有如下几个限制条件必须要满足：</p>
+<ul>
+<li>所有列的排序方向（倒序或正序）都一样</li>
+<li>ORDER BY的顺序必须满足索引列顺序最左前缀的要求</li>
+<li>但是当前导列为常量时，ORDER BY子句可以不满足索引的最左前缀</li>
+</ul>
+<p>第一个很好理解，如果ORDER BY的每一列的排序方向不一样，我们就不能够按照统一的遍历方向来遍历B树索引了。因此，遍历B树索引扫描出来的索引顺序一定全部都是同一个顺序，要么是升序要么是降序。第二条也很好理解，因为B树索引在排序的时候也是按照前缀来进行排序，所以如果ORDER BY也必须满足这个索引前缀的顺序。最后一条，如果前导量是常量的话，就可以直接确定B树索引中前缀一个索引列的位置，之后的所有的后续的索引列都从B树的这个位置开始扫描即可，因此这样也是可以使用索引进行排序的。</p>
+<p>在这里需要注意的一点是，在使用索引进行排序时，我们不但不能在前导列中使用范围查询，还不能使用IN子句查询。以上这两种情况将无法使用索引进行排序，还请注意。具体的例子如下：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">... WHERE rental_date &gt; '2005-05-25' ORDER BY inventory_id, customer_id;</div><div class="line">... WHERE rental_date &gt; '2005-05-25' AND inventory_id IN(1,2) ORDER BY customer_id;</div></pre></td></tr></table></figure>
+
+<p>还需要注意的一点是，如果可以的话尽可能设计为覆盖索引，这样就可以最大限度利用索引性能，还不用每读取一个索引就去回读一次物理行。</p>
+<h3 id="3-4_使用聚簇索引">3.4    使用聚簇索引</h3>
+<p>聚簇索引是MySQL中的InnoDB存储引擎提供的一种非常常用的索引机制。所谓聚簇索引，顾名思义就是根据某一个索引列将一系列的数据行聚集在一起。具体的来定义，聚簇索引就是通过一个聚簇索引列，将一系列行按照聚簇索引列的顺序物理存储到存储介质中。通常，聚簇索引会把所有的列数据存储在B-Tree的叶子节点上。和普通的B-Tree索引不同，普通的索引的B-Tree叶子节点存储的是指向物理行的指针。</p>
+<p>在MySQL的InnoDB中，默认开启聚簇索引并且默认把表的主键作为聚簇索引列，如果表没有定义主键的话，InnoDB会选择一个唯一的非空索引列代替；如果没有这样的索引的话，InnoDB会隐式定义一个主键来作为聚簇索引。注意，一个表有且只能有一个索引列被定义为聚簇索引。简单说来，聚簇索引仍然是定义在B树索引基础上，定义聚簇索引的索引列InnoDB将会以这个聚簇索引为排序基础，将一个页中聚簇索引数值相近的数据行尽量在物理上放在一起，因此如果我们按照聚簇索引列的顺序访问数据将实际最后的随机I/O去数据行的过程将会转换为顺序I/O，这样会极大减少MySQL的CPU使用，相对应的会大大提升MySQL的性能。</p>
+<p>下面以一个简单的例子，来阐述一下聚簇索引的数据分布情况。假如说我们有如下表：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">CREATE</span> <span class="keyword">TABLE</span> layout_test (</span></div><div class="line">    col1 <span class="built_in">int</span> <span class="keyword">NOT</span> <span class="literal">NULL</span>,</div><div class="line">    col2 <span class="built_in">int</span> <span class="keyword">NOT</span> <span class="literal">NULL</span>,</div><div class="line">    <span class="keyword">PRIMARY</span> <span class="keyword">KEY</span>(col1),</div><div class="line">    <span class="keyword">KEY</span>(col2)</div><div class="line">);</div></pre></td></tr></table></figure>
+
+<p>假设该表的主键取值范围为1~10000，我们按照随机顺序插入并使用OPTIMIZE TABLE命令做优化，col1为聚簇索引列，因此数据分布会相近值按照顺序连续分布，然后col2的值随机分布。如下图所示为InnoDB在以主键col1为聚簇索引列的数据分布情况：</p>
+<p><img src="/images/1418980745186.png" alt="Alt text"></p>
+<p>可以注意到，按照这种方式索引的数据分布式以聚簇索引列为顺序来组织数据分布的。并且由于聚簇索引的特殊性，主键索引列会将数据直接存储在索引的叶子节点中。这里与一般的情况有所不同的是，二级索引列会在叶子节点中保存主键值而不是指向数据行的“行指针”。因此这样虽然会导致在访问二级索引的时候会二次查找索引，但是这样对于插入也避免去多余地维护二级索引列的相关更新。因为主键值是不会变的，所以这里相当于二级索引列引用的主键值，所以不用维护二级索引列的相关更新。为了和一般的索引结构相对比，这里引入MyISAM存储引擎的B树索引结构作为对比，其与InnoDB的聚簇索引的区别如下图所示：</p>
+<p><img src="/images/1418980751584.png" alt="Alt text"></p>
+<p>总结而言聚簇索引的主要优点有如下几条：</p>
+<ul>
+<li>将相关数据保存在一起</li>
+<li>顺序数据访问更快</li>
+<li>与覆盖索引相结合可以避免二级索引的两次查找</li>
+</ul>
+<p>然而，虽然聚簇索引有许多优点，但是如果在不合适的场景选择不合适的索引列作为聚簇索引会有许多问题。首先，对聚簇索引行的插入速度严重依赖于聚簇索引列的插入顺序，因为InnoDB必须对于每次插入都把带有聚簇索引列值的行插入到对应的位置，类似于插入排序的一个过程。因此我们在选择聚簇索引列的时候最好选择那种可以自然而然每次插入都增长的列，例如自增ID、时间戳等等。其次，自然的更新聚簇索引列的代价也会比较高，所以我们尽量不要去更新聚簇索引列的值，因为这样不仅会导致数据行的移动，而且在物理页已满的情况下，还会造成“页分裂”现象。如果InnoDB中存在过多的碎片页，会使得普通的全表扫描也变慢，如此一来就会非常得不偿失。因此，我们需要尽量杜绝对聚簇索引列的更新，所幸的是这样的规则并不难实现。最后，二级索引的二次查找现象其实是一种折中的设计考虑，在某些特殊场景下会显得效率不够高。因此，在这些特殊场景下，我们可以考虑主动关闭聚簇索引或者使用其他的存储引擎或者索引方式。</p>
+<h3 id="3-5_使用覆盖索引">3.5    使用覆盖索引</h3>
+<p>所谓覆盖索引就是指一种索引的设计方式，其实在MySQL中并没有独立的一种叫做“覆盖索引”的索引类型。这种设计方式，即如果索引包含（覆盖）所有需要查询的字段的值，则就未“覆盖索引”。我们知道如果根据索引索引到具体行的之后，如果需要的查询的数据不在索引中，MySQL就不得不回读具体的数据行取出查询所需要的数据列。试想，如果在索引中已经全部覆盖了查询所需的数据列，MySQL就仅仅只需要读取索引就可以完成查询，而不用再根据物理行的位置去读取物理行的数据，这样讲大大提高MySQL的查询效率。覆盖索引是一个非常有用的设计模式，我们在设计插叙和索引的时候就应该充分考虑这一点。</p>
+<p>首先，一般而言数据行的数据量会远大于索引的大小，所以避免读取数据行将大大提高MySQL的性能。其次，由于物理行通常都是随机存储的，如果每一次读取索引都要去读取物理行，则实际上MySQL完成的随机I/O，然而一般索引是按照顺序存储的，所以如果仅仅只是读取索引列的话，实际上将是顺序I/O。我们知道，在一般的机械硬盘的环境下，顺序I/O会比随机I/O快很多（当然在SSD的环境下，这一情况将会的到较大的改善）。然后，在缓存层面，大多数存储引擎可以对索引进行缓存，然而如果需要缓存数据行的话需要操作系统的底层的支持。因此，如果仅仅只是读取索引的话，在缓存层面将会节省一次或多次系统调用，这一点也将一定程度上提高MySQL的性能。</p>
+<p>综上所述，我们在设计的查询的时候应该尽可能考虑将通常的索引转换为覆盖索引。</p>
+<h2 id="4-_减少索引占用空间">4. 减少索引占用空间</h2>
+<h3 id="4-1_使用前缀索引">4.1    使用前缀索引</h3>
+<p>在之前的3.1小节在谈及选择性问题的时候已经引出了一点索引前缀长度选择的问题，其实这么做不仅提升了索引的性能，而且比较重要的一点是，如果对于像BLOB或是TEXT这样的字段，前缀索引大大减少了索引的大小，减小的索引的占用空间。</p>
+<p>下面详细介绍需要使用前缀索引技术的场景。首先，对于变长的字段，像类似于地区城市或是街道之类的信息。这样的字段都有一个特点就是，其长度非常的不统一，虽然大多数时候这些字段都有一个可以接受的长度，但是不排除会有一些字段拥有非常长的长度，例如当我们发现某一个街道名是由好几街道名拼接而成并且保存的其街道的相对方位是，这种样的街道名就会非常的长。因此，这里我们将使用前缀索引技术对这样的字段的最大长度做一个截断，限制其最大长度。这样做有助于更好地维护B树索引列的结构。具体的长度选择方法就如3.1节中所述，我们可以分别计算不同长度下某一列的选择性大小，当选择性比较接近于完全选择性时，就可以选择这样的长度，在这里就不将赘述。</p>
+<p>其次，在MySQL中像BLOB或是TEXT这样的字段类型，默认情况下是必须使用前缀进行索引。因为这些字段都是用来表示非常大的数据类型的，其中BLOB表示的是二进制类型，TEXT表示的是文本类型。在这种情况下，无论如何MySQL都是无法使用全部长度的字段来维护B树索引的，因此这里必须使用前缀索引。至于前缀长度的选择，这里也类似于3.1节中提出的方法，但是有一点的不同的是，这里的前缀长度为了区分性可以比一般的字段的前缀长度长一些，但是也不要过长，如果过长的话B树索引将会消耗很多CPU来用在维护其索引的结构上。</p>
+<p>综上所述，在上述几种情况下我们可以使用前缀索引来提高索引的性能并同时减少索引的占用空间大小，可谓一举两得。</p>
+<h3 id="4-2_索引压缩技术">4.2    索引压缩技术</h3>
+<p>在某些特殊的场景下，我们可能会对索引的占用空间的节省上有比较强烈的需求，在这种情况下我们可以使用相应的存储引擎提供的索引压缩功能。</p>
+<p>下面详细阐述一种在MyISAM存储引擎会用的前缀压缩技术。MyISAM的前缀索引使用一种非常直接的基于前后依赖项的压缩技术。这种压缩方法简单来说就是，当MyISAM发现前项的前缀在后项的对应的前缀有重复时，其后项就不用重复存储公共的前缀，而只用存储其与前项不同的部分。举个简单的例子来说就是，如果索引块中第一个值是“perform”，第二个值是“performance”，那么第二个值使用前缀压缩技术压缩后所得的结果就类似于“7,ance”。</p>
+<p>虽然MyISAM的前缀压缩能够在一定程度上减小索引的占用空间，但是带来的代价是需要更多的CPU和内存来计算压缩后的索引的真正值。特别是，由于这种前缀技术的特点，我们无法在B树中使用二分查找了查找索引值，因为其压缩项是依赖与前项的具体指的，所以这样一来MyISAM就只能顺序扫描索引，其实就这一点而言是得不偿失的。特别是对于CPU密集的应用而言，如果我们使用前缀压缩技术进行索引压缩，会使得MySQL的读写性能比不使用慢好几倍。</p>
+<p>综上所述，虽然某一些压缩技术能够大大减少索引的占用空间，但是这通常是以解压缩所带来的CPU消耗和内存占用为代价的。而且对于某些压缩技术如前缀索引，还会有许多其他的缺点。因此，如果不是对索引空间有非常极端的要求，最好不要使用索引压缩技术。</p>
+<h2 id="5-_优化SQL语句">5. 优化SQL语句</h2>
+<p>第五节将从查询设计的角度出发，通过列举一些具体场景来阐述在场景的几种情况下我们应该怎样设计查询才能最好地配合索引使得MySQL的性能达到最高，同时还将阐述几种常见的使得索引不作为的情况以及几种错误的查询写法。</p>
+<h3 id="5-1_多条件查询索引设计">5.1    多条件查询索引设计</h3>
+<p>下面介绍的是比较常见的多条件查询场景，让我们再次来举婚恋交友网站这个例子。我们设想一个User表将会有诸如性别、爱好、地区、职业、收入、身高等等一些列。那么，在用户进行查询的时，必将组合一个或多个条件进行过滤查询，在这里我们考虑用以关系型数据库表为基础的技术来实现这样的查询，那么如何才能设计出能尽量满足这样的多条件查询的索引结构呢？首先，最重要的一点我们需要确定索引列的排列顺序，回顾3.1节和3.2节中介绍的选择性最大原理以及频率最大原理。在这里，很显然几乎所有的用户查询通常都是需要指定对方的性格，这样的情况覆盖了几乎所有查询，满足频率最大原理。因此，这里我们应该将性别字段排在索引列的最前面。然后的排序遵循选择最大原理以及频率最大原理的平衡，如果某一个列在常规查询中的出现频率非常高，就应该适当提高其在索引列排序中的地位，同时在这样的基础上，如果某一列具有非常高的选择性同时频率出现也很高，则更应该排在索引列的前面。说实话，这是一个比较认为的过程，我们很难得到一个通用的标准来量化地决定不同的选择性和频率的字段在索引列中的排序情况，只能大致其排列位置。当然所幸的是，这里不仅仅只有这一个条件可以决定其索引的排序，我们还可以考虑具体查询中所需要的排序和分组的需求，来更具体地确定索引列的排序情况。通常情况下，最终都能确定出一个比较好的索引排序，在这种情况下，一般对索引列的排序的微调都不会影响MySQL最终的整体查询性能。因此实际上，对于一个大致正确的索引列排序，开发者也不必纠结于其最优的排序顺序。</p>
+<p>其次，在设计一些特殊的查询时，比如各种排序和分组的需求，由于其排序条件一般情况下都非常短小，不需要组合多种索引列。因此在这种情况下，我们可以单独对排序的情况设计索引，而不用将排序与之前通用的索引顺序进行组合。当需要范围查询时，我们也必须要考虑之前的索引列的排序，因为索引的作用止步于范围查询，除非我们用IN子句来代替范围查询。例如例子中的加入说有省份、性别、职业等查询条件，如果查询允许多选的话，我们就可以将多选的条件转换为IN子句查询。如下所示：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">WHERE</div><div class="line">    sex     IN("male","female")     AND</div><div class="line">    region  IN("SH","SC","ZJ")      AND</div><div class="line">    career  IN("EG","TH")</div></pre></td></tr></table></figure>
+
+<p>但是，我们需要注意的是，当前的IN子句的组合情况已经达到了 2 X 3 X 2 = 12种情况，在MySQL生成执行计划计算成本时，会对每一种情况计算一次成本，因此如果IN子句情况太多时MySQL将会消耗大量时间生成执行计划。当然，不用太过恐慌，只要IN子句不是达到几千种情况，一般情况下MySQL消耗在执行计划生成上的开销还是可以接受的，具体情况应该更具具体的应用和硬件设备进行具体的讨论。<br>同时，对于一些在查询中不是经常使用列，我们也可以果断不建立索引。因为通常这些列不可能单独出现作为查询条件，一般是和前面许多其他的列进行组合成为查询条件，因此在前面的索引列已经过滤掉大多数数据行的情况下，剩下的一些列就完全可以不使用索引了。</p>
+<p>最后，我们需要避免多个范围查询，如前所述范围查询将会使得索引的作用止步。因此就算不得已使用范围查询，也应该在尽量过滤掉足够多列之后再添加范围查询条件。当然，在一些常见的场景下，比如在对年龄进行筛选时，我们可以通过多设置一个age_tag列来将年龄分桶为多个区段（18~22 23~27）等等，这样就可以将范围查询转换为等值查询。</p>
+<h3 id="5-2_索引不作为的原因">5.2    索引不作为的原因</h3>
+<p>最后，本小节简单总结前面几小节提到过的常见的使得索引不作为的情况。首先作为索引不作为最常见的一种情况就是非等式运算，上面已经提到的范围查询就是非等式运算的一种最常见的情况。所谓等式运算，即通过“=”或者“!=”以及其他任何可以直接转换为等式运算的比较，即为等式运算。可以转换为等式运算的前面也提到过例子，那就是IN子句查询。在实际查询设计中，我们应该避免在索引列上进行非等式查询，如果一定要做非等式查询也应该尽可能在过滤掉尽可能多的列之后再使用非等式查询。下面列举几个非等式查询的例子：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="operator"><span class="keyword">SELECT</span> ... <span class="keyword">FROM</span> ... <span class="keyword">WHERE</span> age &lt; <span class="number">50</span> <span class="keyword">AND</span> ...</span></div><div class="line"><span class="keyword">SELECT</span> ... <span class="keyword">FROM</span> ... <span class="keyword">WHERE</span> salary &gt; <span class="number">10000</span> <span class="keyword">AND</span> ...</div></pre></td></tr></table></figure>
+
+<p>其次，NULL值比较也会造成索引不作为。因为我们知道索引必须要根据其索引列具体的值来组织索引的结构，而对于NULL值索引是无法将其纳入索引结构的管理体系，所以对NULL值的比较将默认无法使用索引，而使用全表扫描。因此，这里在具体的查询和表设计，在通常情况下应该尽可能不使用NULL值。对表的每一列都尽可能使用NOT NULL并设置DEFAULT值。</p>
+<p>最后，在索引列使用一些内建函数或者用户自定义函数时，索引也将会不作为。因为函数有可能会有前后依赖项，需要运行时才能确定其具体值，而不是能够在执行计划生成时期就能够确定函数的返回值，所以这里大多数情况下使用函数将会使得索引不作为。</p>
+<p>综上所述，对于以上几种常见的索引不作为的情况，需要在索引设计和查询设计时多多注意。</p>
+<h2 id="6-_总结">6. 总结</h2>
+<p>本篇博客首先从索引优化的评判标准出发，详细阐述了常用的索引设计好坏评判标准，其中最终要的一点设计指导方针就是是否满足三星系统。如果们的索引设计能够满足三星设计系统，则通常情况下这样的索引结构都是能够满足高性能MySQL的要求的。其次，我们也可以通过EXPLAIN语句来观察某一个具体查询是否按照预想使用了相应的索引，并作出针对性的优化。然后，我们还可以使用多种多样的MySQL基准测试工具来做一些benchmark，以便找到MySQL整体的系统瓶颈所在，然后就可以针对具体的瓶颈作出具体的优化。</p>
+<p>然后，第三小节和第四小节就提升索引性能和减少索引占用空间这个两个角度阐述了索引设计的一些原则和优化技巧。首先，在第三小节中，前两小节给出了两个非常重要的索引列排序原则，即选择性最大原理以及频率最大原理。其次，在考虑索引列排序的同时我们还需要考虑是否应该为排序和分组设计索引，如此一来索引列的顺序又会发生怎样的变化。最后两小节，分别介绍了聚簇索引和覆盖索引在InnoDB中的应用以及它们的优缺点。在第四小节中，我们分别介绍了两种节省索引占用空间的技术，分别是前缀索引以及MyISAM中使用的索引压缩技术。然而，索引压缩技术带来的空间节省是建立在更多的CPU消耗和内存占用的基础上的，所以如果不是非常特殊的场景，尽可能不要使用索引压缩技术。</p>
+<p>最后，第五小节简要概括了几种常见场景下的SQL语句设计技巧。首先，5.1小节介绍了多条件过滤查询的场景下如何设计SQL语句与建立索引，其中最重要的仍然是选择性最大原理以及频率最大原理的应用。5.2小节简要概括了3种使得索引不作为的原因，即分别是非等式比较、NULL比较以及函数应用。</p>
+<h2 id="7-_引用">7. 引用</h2>
+<p>[1]      Balling D J, Zawodny J. High Performance MySQL[M]. Safari Tech Books Online, 2004.</p>
+<p>[2]      Lahdenmaki T, Leach M. Relational Database Index Design and the Optimizers 2nd [M]. John Wiley &amp; Sons, 2005.</p>
+<p>[3]      文平 . Oracle数据库性能优化的艺术, 2012</p>
+  
+	</div>
+		<footer class="article-footer clearfix">
+
+  <div class="article-tags">
+  
+  <span></span> <a href="/tags/MySQL/">MySQL</a><a href="/tags/索引/">索引</a>
+  </div>
+
+
+<div class="article-categories">
+  <span></span>
+  <a class="article-category-link" href="/categories/读书笔记/">读书笔记</a>
+</div>
+
+
+
+<div class="article-share" id="share">
+
+  <div data-url="http://www.nyankosama.com/2014/12/19/high-performance-index/" data-title="高性能索引策略初探 | Nyankosama&#39;s Blog" data-tsina="null" class="share clearfix">
+  </div>
+
+</div>
+</footer>   	       
+	</article>
+	
+<nav class="article-nav clearfix">
+ 
+
+<div class="next">
+<a href="/2014/12/15/akka-source/"  title="akka源码分析（一）">
+ <strong>NEXT:</strong><br/> 
+ <span>akka源码分析（一）
+</span>
+</a>
+</div>
+
+</nav>
+
+	
+<section class="comment">
+	<div class="ds-thread"></div>
+</section>
+
+</div>  
+      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
+
+  <div id="toc" class="toc-aside">
+  <strong class="toc-title">Contents</strong>
+  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#1-_引言"><span class="toc-text">1. 引言</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#2-_索引优化评判标准"><span class="toc-text">2. 索引优化评判标准</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#2-1_三星系统"><span class="toc-text">2.1 三星系统</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-2_EXPLAIN语句"><span class="toc-text">2.2 EXPLAIN语句</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-3_基准测试"><span class="toc-text">2.3 基准测试</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-_提升索引性能"><span class="toc-text">3. 提升索引性能</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#3-1_选择性最大原理"><span class="toc-text">3.1 选择性最大原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-2_频率最大原理"><span class="toc-text">3.2    频率最大原理</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-3_为排序而设计索引"><span class="toc-text">3.3    为排序而设计索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-4_使用聚簇索引"><span class="toc-text">3.4    使用聚簇索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-5_使用覆盖索引"><span class="toc-text">3.5    使用覆盖索引</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#4-_减少索引占用空间"><span class="toc-text">4. 减少索引占用空间</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1_使用前缀索引"><span class="toc-text">4.1    使用前缀索引</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2_索引压缩技术"><span class="toc-text">4.2    索引压缩技术</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-_优化SQL语句"><span class="toc-text">5. 优化SQL语句</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#5-1_多条件查询索引设计"><span class="toc-text">5.1    多条件查询索引设计</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#5-2_索引不作为的原因"><span class="toc-text">5.2    索引不作为的原因</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-_总结"><span class="toc-text">6. 总结</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#7-_引用"><span class="toc-text">7. 引用</span></a></li></ol>
+  </div>
+
+<div id="asidepart">
+<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
+<aside class="clearfix">
+<div id="authorInfo">
+	
+		<div class="author-logo"></div>		
+	
+	<div class="social-list" class="clearfix">
+		
+		<a href="http://weibo.com/nyankosama" target="_blank" title="weibo"></a>
+		
+		
+		
+		<a href="https://github.com/nyankosama" target="_blank" title="github"></a>
+		
+		
+		<a href="https://www.facebook.com/heliangrui" target="_blank" title="facebook"></a>
+		
+		
+	</div>
+</div>
+
+  
+<div class="categorieslist">
+	<p class="asidetitle">Categories</p>
+		<ul>
+		
+			<li><a href="/categories/源码分析/" title="源码分析">源码分析<sup>1</sup></a></li>
+		
+			<li><a href="/categories/读书笔记/" title="读书笔记">读书笔记<sup>1</sup></a></li>
+		
+		</ul>
+</div>
+
+
+  
+<div class="tagslist">
+	<p class="asidetitle">Tags</p>
+		<ul class="clearfix">
+		
+			<li><a href="/tags/Go/" title="Go">Go<sup>2</sup></a></li>
+		
+			<li><a href="/tags/MySQL/" title="MySQL">MySQL<sup>1</sup></a></li>
+		
+			<li><a href="/tags/akka/" title="akka">akka<sup>1</sup></a></li>
+		
+			<li><a href="/tags/git/" title="git">git<sup>2</sup></a></li>
+		
+			<li><a href="/tags/goroutines/" title="goroutines">goroutines<sup>2</sup></a></li>
+		
+			<li><a href="/tags/源码分析/" title="源码分析">源码分析<sup>1</sup></a></li>
+		
+			<li><a href="/tags/索引/" title="索引">索引<sup>1</sup></a></li>
+		
+		</ul>
+</div>
+
+
+  <div class="rsspart">
+	<a href="atom.xml" target="_blank" title="rss">RSS</a>
+</div>
+
+  
+  <div class="tagcloudlist">
+    <p class="asidetitle">Tag Cloud</p>
+    <div class="tagcloudlist clearfix">
+       <a href="/tags/Go/" style="font-size: 20.00px;">Go</a><a href="/tags/MySQL/" style="font-size: 10.00px;">MySQL</a><a href="/tags/akka/" style="font-size: 10.00px;">akka</a><a href="/tags/git/" style="font-size: 20.00px;">git</a><a href="/tags/goroutines/" style="font-size: 20.00px;">goroutines</a><a href="/tags/源码分析/" style="font-size: 10.00px;">源码分析</a><a href="/tags/索引/" style="font-size: 10.00px;">索引</a>
+    </div>
+  </div>
+
+
+</aside>
+</div>
+    </div>
+    <footer><div id="footer" >
+    
+            <p class="copyright"> © 2014 
+		
+		<a href="http://www.nyankosama.com" target="_blank" title="Liangrui He">Liangrui He</a>
+		
+            && Powered by <a href="http://hexo.io" target="_blank" title="hexo">hexo</a> && Theme by <a href="http://gengbiao.me" target="_blank" title="coney">coney</a>
+            </div>
+</footer>
+    <script src="/js/jquery-2.1.0.min.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){ 
+  $('.navbar').click(function(){
+    $('header nav').toggleClass('shownav');
+  });
+  var myWidth = 0;
+  function getSize(){
+    if( typeof( window.innerWidth ) == 'number' ) {
+      myWidth = window.innerWidth;
+    } else if( document.documentElement && document.documentElement.clientWidth) {
+      myWidth = document.documentElement.clientWidth;
+    };
+  };
+  var m = $('#main'),
+      a = $('#asidepart'),
+      c = $('.closeaside'),
+      o = $('.openaside');
+  $(window).resize(function(){
+    getSize(); 
+    if (myWidth >= 1024) {
+      $('header nav').removeClass('shownav');
+    }else
+    {
+      m.removeClass('moveMain');
+      a.css('display', 'block').removeClass('fadeOut');
+      o.css('display', 'none');
+      
+      $('#toc.toc-aside').css('display', 'none');
+        
+    }
+  });
+  c.click(function(){
+    a.addClass('fadeOut').css('display', 'none');
+    o.css('display', 'block').addClass('fadeIn');
+    m.addClass('moveMain');
+  });
+  o.click(function(){
+    o.css('display', 'none').removeClass('beforeFadeIn');
+    a.css('display', 'block').removeClass('fadeOut').addClass('fadeIn');      
+    m.removeClass('moveMain');
+  });
+  $(window).scroll(function(){
+    o.css("top",Math.max(80,260-$(this).scrollTop()));
+  });
+});
+</script>
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var ai = $('.article-content>iframe'),
+      ae = $('.article-content>embed'),
+      t  = $('#toc'),
+      h  = $('article h2')
+      ah = $('article h2'),
+      ta = $('#toc.toc-aside'),
+      o  = $('.openaside'),
+      c  = $('.closeaside');
+  if(ai.length>0){
+    ai.wrap('<div class="video-container" />');
+  };
+  if(ae.length>0){
+   ae.wrap('<div class="video-container" />');
+  };
+  if(ah.length==0){
+    t.css('display','none');
+  }else{
+    c.click(function(){
+      ta.css('display', 'block').addClass('fadeIn');
+    });
+    o.click(function(){
+      ta.css('display', 'none');
+    });
+    $(window).scroll(function(){
+      ta.css("top",Math.max(140,320-$(this).scrollTop()));
+    });
+  };
+});
+</script>
+
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var $this = $('.share'),
+      url = $this.attr('data-url'),
+      encodedUrl = encodeURIComponent(url),
+      title = $this.attr('data-title'),
+      tsina = $this.attr('data-tsina');
+  var html = [
+  '<a href="#" class="overlay" id="qrcode"></a>',
+  '<div class="qrcode clearfix"><span>扫描二维码分享到微信朋友圈</span><a class="qrclose" href="#share"></a><strong>Loading...Please wait</strong><img id="qrcode-pic" data-src="http://s.jiathis.com/qrcode.php?url=' + encodedUrl + '"/></div>',
+  '<a href="#textlogo" class="article-back-to-top" title="Top"></a>',
+  '<a href="https://www.facebook.com/sharer.php?u=' + encodedUrl + '" class="article-share-facebook" target="_blank" title="Facebook"></a>',
+  '<a href="#qrcode" class="article-share-qrcode" title="QRcode"></a>',
+  '<a href="https://twitter.com/intent/tweet?url=' + encodedUrl + '" class="article-share-twitter" target="_blank" title="Twitter"></a>',
+  '<a href="http://service.weibo.com/share/share.php?title='+title+'&url='+encodedUrl +'&ralateUid='+ tsina +'&searchPic=true&style=number' +'" class="article-share-weibo" target="_blank" title="Weibo"></a>',
+  '<span title="Share to"></span>'
+  ].join('');
+  $this.append(html);
+  $('.article-share-qrcode').click(function(){
+    var imgSrc = $('#qrcode-pic').attr('data-src');
+    $('#qrcode-pic').attr('src', imgSrc);
+    $('#qrcode-pic').load(function(){
+        $('.qrcode strong').text(' ');
+    });
+  });
+});     
+</script>
+
+
+<script type="text/javascript">
+  var duoshuoQuery = {short_name:"null"};
+  (function() {
+    var ds = document.createElement('script');
+    ds.type = 'text/javascript';ds.async = true;
+    ds.src = '//static.duoshuo.com/embed.js';
+    ds.charset = 'UTF-8';
+    (document.getElementsByTagName('head')[0] 
+    || document.getElementsByTagName('body')[0]).appendChild(ds);
+  })();
+</script> 
+
+
+
+
+
+<script>
+    
+        var _bdImg = '4';
+    
+    window._bd_share_config={
+        "common":{
+            "bdSnsKey":{
+
+            },
+            "bdText":"",
+            "bdMini":"2",
+            "bdMiniList":[
+                "qzone",
+                "tsina",
+                "weixin",
+                "renren",
+                "tqq",
+                "tieba",
+                "douban",
+                "sqq",
+                "diandian",
+                "huaban",
+                "youdao",
+                "mail",
+                "ty",
+                "fbook",
+                "twi",
+                "linkedin",
+                "copy",
+                "print"
+            ],
+            "bdPic":"",
+            "bdStyle":"0",
+            "bdSize":"16"
+        },
+        "slide":{
+            "type":"slide",
+            "bdImg":_bdImg,
+            "bdPos":"right",
+            "bdTop":"350"
+        },
+        "image":{
+            "viewList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ],
+            "viewText":"分享：",
+            "viewSize":"16"
+        },
+        "selectShare":{
+            "bdContainerClass":null,
+            "bdSelectMiniList":[
+                "weixin",
+                "qzone",
+                "tsina",
+                "renren",
+                "douban",
+                "tqq"
+            ]
+        }
+    };
+    with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?v=89860593.js?cdnversion='+~(-new Date()/36e5)];
+</script>
+
+
+
+
+
+  </body>
+</html>
+
